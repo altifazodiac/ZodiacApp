@@ -1,6 +1,6 @@
 // firebaseFunctions.ts
 import { ref, query, orderByKey, startAfter, limitToFirst, push, set, remove, get } from 'firebase/database';
-import { database } from '../firebase';  // Adjust the import based on your project structure
+import { database } from './firebase';  // Adjust the import based on your project structure
 
 // Fetch initial set of products
 export const fetchProducts = async (itemsPerPage: number) => {
