@@ -8,6 +8,7 @@ import {
   Switch,
   FlatList,
   Image,
+  Alert,
   Dimensions,
   ActivityIndicator,
   TouchableOpacity,
@@ -26,7 +27,7 @@ import { runOnJS } from 'react-native-reanimated';
 import { getDatabase, ref as databaseRef, get, update } from 'firebase/database';
 import RNPickerSelect from 'react-native-picker-select'; // Import statement
 import { AntDesign } from '@expo/vector-icons';
-import { database } from './firebase';
+
  
 
 const placeholderImage = 'https://via.placeholder.com/100';
@@ -163,11 +164,17 @@ const Products = () => {
     setProductBarcode(product.productBarcode);
     setProductSize(product.productSize);
     setStatus(product.status);
-    setImageUri(product.imageUrl || null);
+  
+    // Set imageUrl from the database (Firebase Storage URL)
+    setImageUrl(product.imageUrl || ''); // Use the image URL from the database
+    
+    // Reset imageUri to null because it's only used when selecting a new image
+    setImageUri(null); 
+  
     setEditId(product.id || null);
-
     toggleFormDrawer();
   };
+  
   const fetchCategories = async () => {
     try {
       const db = getDatabase();
@@ -268,19 +275,60 @@ const Products = () => {
       }
     }
   };
-
+   
   const handleDeleteProduct = async (id: string, imageUrl: string | null) => {
     try {
+      // If the product has an associated image URL, delete the image from Firebase Storage
+      if (imageUrl) {
+        const storage = getStorage();
+        const imageRef = storageRef(storage, imageUrl); // Reference to the image in Firebase Storage
+  
+        await deleteObject(imageRef); // Delete the image from storage
+        console.log('Image deleted successfully');
+      }
+  
+      // Delete the product from the database
       await deleteProduct(id);
+  
       loadInitialProducts(); // Reload products after deletion
+      alert('Product deleted successfully!');
     } catch (error) {
-      console.error('Error deleting product:', error);
+      if (error instanceof Error) {
+        console.error('Error deleting product:', error.message);
+        alert(`Error deleting product: ${error.message}`);
+      } else {
+        console.error('Error deleting product:', error);
+        alert('An unknown error occurred while deleting the product.');
+      }
     }
   };
-
+  const handleRemoveImage = async () => {
+    if (!imageUrl) return;
+  
+    try {
+      const storage = getStorage();
+      const imageRef = storageRef(storage, imageUrl); // Reference to the image in Firebase Storage
+  
+      // Delete the image from Firebase Storage
+      await deleteObject(imageRef);
+      console.log('Image deleted successfully from storage');
+  
+      // Clear the image URL from the form state
+      setImageUrl(null);
+      
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Error deleting image:', error.message);
+        alert(`Error deleting image: ${error.message}`);
+      } else {
+        console.error('Error deleting image:', error);
+        alert('An unknown error occurred while deleting the image.');
+      }
+    }
+  };
   const handleImagePick = async () => {
     setIsImageUploadClicked(true); // Track that the upload button was clicked
-  
+    
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
       alert('Permission to access the gallery is required!');
@@ -293,20 +341,18 @@ const Products = () => {
       quality: 1,
     });
   
-    if (!pickerResult.canceled) {
+    if (!pickerResult.canceled && pickerResult.assets.length > 0) {
       const selectedImage = pickerResult.assets[0].uri;
-      setImageUri(selectedImage);
+      setImageUri(selectedImage); // Set imageUri for uploading the local image
     }
   };
   
-  
-  
   const handleUploadImage = async (): Promise<string | null> => {
-    if (!imageUri) return null;
+    if (!imageUri) return null; // Only upload if imageUri exists
   
     try {
       const resizedImage = await ImageManipulator.manipulateAsync(
-        imageUri,
+        imageUri, // Use the local imageUri here
         [{ resize: { width: 100, height: 100 } }],
         { compress: 1, format: ImageManipulator.SaveFormat.PNG }
       );
@@ -319,84 +365,81 @@ const Products = () => {
       await uploadBytes(storageReference, blob);
       const downloadUrl = await getDownloadURL(storageReference);
   
-      setImageUrl(downloadUrl);
+      setImageUrl(downloadUrl); // Set the Firebase image URL
+      setImageUri(null); // Reset imageUri after upload
       return downloadUrl;
     } catch (error) {
-      // Check if 'error' is an instance of Error to safely access 'message'
       if (error instanceof Error) {
         console.error('Image upload failed:', error.message);
         alert(`Image upload failed: ${error.message}`);
       } else {
-        console.error('Image upload failed:', error); // Handle non-standard errors
+        console.error('Image upload failed:', error);
         alert('Image upload failed. Please try again.');
       }
       return null;
     }
   };
   
-  
   const handleAddOrUpdateProduct = async () => {
-    // Check for required fields
     if (!productName || !productPrice || !productDescription) {
       alert('Please fill all product details before submitting.');
       return;
     }
   
-    let uploadedImageUrl = imageUrl; // Default to the existing imageUrl
+    let finalImageUrl = imageUrl; // Start with the current image URL (from Firebase)
   
-    // If user clicked the upload button and selected a new image, handle the image upload
-    if (isImageUploadClicked && imageUri && imageUri !== imageUrl) {
-      uploadedImageUrl = await handleUploadImage(); // Upload new image
-      if (!uploadedImageUrl) {
-        return; // Stop if image upload fails
+    // Only upload a new image if one was selected (via imageUri)
+    if (imageUri) {
+      const uploadedImageUrl = await handleUploadImage();
+      if (uploadedImageUrl) {
+        finalImageUrl = uploadedImageUrl; // Replace with the new image URL
       }
     }
-  
-    // Make sure imageUrl is included in product data, even if no new image was uploaded
+   
     const productData = {
       name: productName,
       price: productPrice,
       description: productDescription,
-      categoryId, // Ensure categoryId is correct and available
+      nameDisplay,
+      categoryId,
       costPrice,
       quantity,
       unit,
       productBarcode,
       productSize,
       status,
-      imageUrl: uploadedImageUrl || imageUrl, // Ensure imageUrl is not lost
+      imageUrl: finalImageUrl, // Use the existing or new image URL
     };
   
     try {
-      // Update or add the product in Firebase
       if (editId) {
-        await addOrUpdateProduct(productData, editId); // Updating product
+        await addOrUpdateProduct(productData, editId);
         alert('Product updated successfully!');
       } else {
-        await addOrUpdateProduct(productData, null); // Adding new product
+        await addOrUpdateProduct(productData, null);
         alert('Product added successfully!');
       }
-      resetForm(); // Reset the form after successful submission
+      resetForm(); // Reset the form after submission
       loadProducts(); // Reload the product list
+      toggleFormDrawer(); // Close the form drawer
     } catch (error) {
       if (error instanceof Error) {
-        // Safely access 'message' since 'error' is an instance of 'Error'
         alert(`Error: ${error.message}`);
         console.error('Error adding/updating product:', error.message);
       } else {
-        // Handle non-standard errors
         alert('An unknown error occurred.');
         console.error('Error adding/updating product:', error);
       }
     }
   };
   
-  
   const resetForm = () => {
     setProductName('');
     setProductPrice('');
     setProductDescription('');
     setCategoryId('');
+    setNameDisplay('');
+    setProductSize('');
     setCostPrice('');
     setQuantity('');
     setUnit('');
@@ -408,7 +451,163 @@ const Products = () => {
     setEditId(null);
     setIsImageUploadClicked(false);
   };
+  interface UnitSelectorProps {
+    unit: string;
+    setUnit: (unit: string) => void;
+  }
+  const UnitSelector = ({ unit, setUnit }: UnitSelectorProps) => {
+    const units = [
+      { label: 'Kilograms (kg)', value: 'kg' },
+      { label: 'Pounds (lb)', value: 'lb' },
+      { label: 'Liters (l)', value: 'l' },
+      { label: 'Milliliters (ml)', value: 'ml' },
+      { label: 'Grams (g)', value: 'g' },
+      { label: 'Ounces (oz)', value: 'oz' },
+      { label: 'Cups', value: 'cup' },
+      { label: 'Teaspoons (tsp)', value: 'tsp' },
+      { label: 'Tablespoons (tbsp)', value: 'tbsp' },
+      { label: 'Square Meters (m²)', value: 'm2' },
+      { label: 'Square Feet (ft²)', value: 'ft2' },
+      { label: 'Cubic Meters (m³)', value: 'm3' },
+      { label: 'Cubic Feet (ft³)', value: 'ft3' },
+      { label: 'Inches', value: 'in' },
+      { label: 'Centimeters (cm)', value: 'cm' },
+      { label: 'Millimeters (mm)', value: 'mm' },
+      { label: 'Hectares (ha)', value: 'ha' },
+      { label: 'Acres', value: 'acre' },
+      { label: 'Kilowatt-hours (kWh)', value: 'kWh' },
+      { label: 'Gallons (gal)', value: 'gal' }, // Common volume unit in US
+      { label: 'Quarts (qt)', value: 'qt' }, // Another volume measurement
+      { label: 'Pints (pt)', value: 'pt' }, // Volume measurement
+      { label: 'Metric Tons (t)', value: 't' }, // Weight unit
+      { label: 'Short Tons (ton)', value: 'ton' }, // Another weight unit
+      { label: 'Long Tons (long-ton)', value: 'long-ton' }, // Weight unit
+      { label: 'Degrees Celsius (°C)', value: 'C' }, // Temperature
+      { label: 'Degrees Fahrenheit (°F)', value: 'F' }, // Temperature
+      { label: 'Seconds (s)', value: 's' }, // Time unit
+      { label: 'Minutes (min)', value: 'min' }, // Time unit
+      { label: 'Hours (h)', value: 'h' }, // Time unit
+      { label: 'Kilometers (km)', value: 'km' }, // Length unit
+      { label: 'Miles (mi)', value: 'mi' }, // Length unit
+      { label: 'Light Years', value: 'ly' }, // Astronomical unit
+    ];
   
+    return (
+      <RNPickerSelect
+        placeholder={{ label: 'Select a Unit', value: null }} // Update placeholder text
+        items={units}
+        onValueChange={(value) => setUnit(value)} // Use setUnit to update the unit state
+        style={{
+          ...pickerSelectStyles,
+          iconContainer: {
+            top: 10,
+            right: 10,
+          },
+        }}
+        value={unit} // Bind the value to the unit state
+        useNativeAndroidPickerStyle={false}
+      />
+    );
+  };
+  interface ProductSizesSelectorProps {
+    productSize: string;
+    setProductSizes: (productSizes: string) => void;
+  }
+  const productSizes = [
+    { label: 'Small (S)', value: 'S' },
+    { label: 'Medium (M)', value: 'M' },
+    { label: 'Large (L)', value: 'L' },
+    { label: 'Extra Large (XL)', value: 'XL' },
+    { label: 'Extra Extra Large (XXL)', value: 'XXL' },
+    { label: 'XXX Large (3XL)', value: '3XL' },
+    { label: 'XXXX Large (4XL)', value: '4XL' },
+    { label: 'Youth Small (YS)', value: 'YS' },
+    { label: 'Youth Medium (YM)', value: 'YM' },
+    { label: 'Youth Large (YL)', value: 'YL' },
+    { label: 'Toddler (T)', value: 'T' },
+    { label: 'Infant (I)', value: 'I' },
+    { label: 'One Size Fits All', value: 'OS' },
+    { label: 'Petite (P)', value: 'P' },
+    { label: 'Tall (T)', value: 'T' },
+    { label: 'Plus Size (1X)', value: '1X' },
+    { label: 'Plus Size (2X)', value: '2X' },
+    { label: 'Plus Size (3X)', value: '3X' },
+    { label: 'Plus Size (4X)', value: '4X' },
+    { label: 'Size 5 (5)', value: '5' },
+    { label: 'Size 6 (6)', value: '6' },
+    { label: 'Size 7 (7)', value: '7' },
+    { label: 'Size 8 (8)', value: '8' },
+    { label: 'Size 9 (9)', value: '9' },
+    { label: 'Size 10 (10)', value: '10' },
+    { label: 'Size 11 (11)', value: '11' },
+    { label: 'Size 12 (12)', value: '12' },
+    { label: 'Size 13 (13)', value: '13' },
+    { label: 'Size 14 (14)', value: '14' },
+    { label: 'Size 15 (15)', value: '15' },
+    { label: 'Half Sizes (e.g., 7.5)', value: '7.5' },
+    { label: 'Custom Size', value: 'custom' },
+    { label: 'XL Tall (XLT)', value: 'XLT' },
+    { label: 'Short Size (SH)', value: 'SH' },
+    { label: 'Pet Size Small', value: 'pet_small' },
+    { label: 'Pet Size Medium', value: 'pet_medium' },
+    { label: 'Pet Size Large', value: 'pet_large' },
+    { label: 'Width Sizes (D, E, EE)', value: 'D' },
+    { label: 'Custom Width', value: 'custom_width' },
+    
+    // Additional Sizes
+    { label: 'Extra Small (XS)', value: 'XS' },
+    { label: 'Extra Extra Extra Large (3XL)', value: '3XL' },
+    { label: 'Extra Extra Extra Extra Large (4XL)', value: '4XL' },
+    { label: 'Boys Small (BS)', value: 'BS' },
+    { label: 'Boys Medium (BM)', value: 'BM' },
+    { label: 'Boys Large (BL)', value: 'BL' },
+    { label: 'Girls Small (GS)', value: 'GS' },
+    { label: 'Girls Medium (GM)', value: 'GM' },
+    { label: 'Girls Large (GL)', value: 'GL' },
+    { label: 'Size 16 (16)', value: '16' }, // Common for girls' clothing
+    { label: 'Size 18 (18)', value: '18' }, // Common for girls' clothing
+    { label: 'Size 20 (20)', value: '20' }, // Common for girls' clothing
+    { label: 'Footwear Size 4 (4)', value: '4' },
+    { label: 'Footwear Size 8 (8)', value: '8' },
+    { label: 'Footwear Size 9 (9)', value: '9' },
+    { label: 'Footwear Size 10.5 (10.5)', value: '10.5' },
+    { label: 'Footwear Size 11.5 (11.5)', value: '11.5' },
+    { label: 'Wide Width (W)', value: 'W' },
+    { label: 'Narrow Width (N)', value: 'N' },
+    { label: 'Boys Extra Large (BXL)', value: 'BXL' },
+    { label: 'Girls Extra Large (GXL)', value: 'GXL' },
+    { label: 'Size A (A)', value: 'A' }, // For some specialty products
+    { label: 'Size B (B)', value: 'B' }, 
+    { label: 'Size C (C)', value: 'C' }, 
+    { label: 'Size D (D)', value: 'D' }, 
+    { label: 'Size E (E)', value: 'E' }, 
+    { label: 'Custom Length', value: 'custom_length' }, // For custom length options
+    { label: 'Neck Size (inches)', value: 'neck_size' }, // For dress shirts and formal wear
+    { label: 'Waist Size (inches)', value: 'waist_size' }, // For pants
+    { label: 'Chest Size (inches)', value: 'chest_size' }, // For shirts
+    // Add more sizes as necessary
+  ];
+  
+  
+  // Your component
+  const ProductSizeSelector = ({ productSize, setProductSizes }: ProductSizesSelectorProps) => {
+    return (
+      <RNPickerSelect
+        placeholder={{ label: "Select a Product Size", value: null }} // Placeholder text
+        items={productSizes} // The defined product sizes
+        onValueChange={(value) => setProductSize(value)} // Update the state on selection
+        style={{ 
+          ...pickerSelectStyles, 
+          iconContainer: { 
+            top: 10,
+            right: 10,
+          },
+        }} 
+        value={productSize} // Set the current value
+        useNativeAndroidPickerStyle={false} // Optional: style for Android
+      />
+    );
+  };
   const renderFormDrawerContent = () => (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollViewContainer}>  
@@ -418,21 +617,31 @@ const Products = () => {
           </Text>
   
           <View style={styles.imagePreview}>
-            <Image
-              source={{ uri: imageUri ? imageUri : placeholderImage }}
-              style={styles.image}
-            />
-            {imageUri && (
-              <TouchableOpacity onPress={() => setImageUri(null)} style={styles.removeButton}>
-                <Icon name="trash" size={16} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
-            <Icon name="upload" size={18} color="#fff" />
-            <Text style={styles.uploadButtonText}>Upload Image</Text>
-          </TouchableOpacity>
+  <Image
+    source={{ uri: imageUri || imageUrl || placeholderImage }} // Use imageUri first if a new image is picked, else imageUrl from Firebase
+    style={styles.image}
+  />
+ {imageUrl && (
+  <TouchableOpacity onPress={handleRemoveImage} style={styles.removeButton}>
+    <Icon name="trash" size={16} color="#fff" />
+  </TouchableOpacity>
+)}
+</View>
+<TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
+  <Icon name="upload" size={18} color="#fff" />
+  <Text style={styles.uploadButtonText}>Upload Image</Text>
+</TouchableOpacity>
           <View style={styles.inputContainer}>
+          <View style={styles.formGroup}>
+ 
+  <TextInput 
+  style={ { width: 0, height: 0 }}
+  value={imageUrl ?? ''} // Use the nullish coalescing operator to provide a default value
+  onChangeText={(text) => setImageUrl(text)} // Allow manual editing of the image URL
+  placeholder="Image URL"
+  editable={editId !== null} // Only editable in update mode
+/>
+</View>
           <RNPickerSelect
       placeholder={{ label: "Select a Category" }}
       items={categories.map(category => ({ label: category.name, value: category.id }))}
@@ -459,6 +668,7 @@ const Products = () => {
             value={nameDisplay} 
             onChangeText={setNameDisplay} 
           />
+          <ProductSizeSelector productSize={productSize} setProductSizes={setProductSize} />
           <TextInput
             style={styles.input}
             placeholder="Product Price"
@@ -466,12 +676,7 @@ const Products = () => {
             onChangeText={setProductPrice}
             keyboardType="numeric"
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Product Description"
-            value={productDescription}
-            onChangeText={setProductDescription}
-          />
+        
           <TextInput
             style={styles.input}
             placeholder="Cost Price"
@@ -493,23 +698,19 @@ const Products = () => {
             onChangeText={setReorderLevel}  
             keyboardType="numeric"
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Unit"  
-            value={unit} 
-            onChangeText={setUnit}  
-          />
+         <UnitSelector unit={unit} setUnit={setUnit} />
           <TextInput
             style={styles.input}
             placeholder="Product Barcode"  
             value={productBarcode} 
             onChangeText={setProductBarcode} 
           />
-          <TextInput
+          
+            <TextInput
             style={styles.input}
-            placeholder="Product Size" 
-            value={productSize} 
-            onChangeText={setProductSize}  
+            placeholder="Description"
+            value={productDescription}
+            onChangeText={setProductDescription}
           />
            <View style={styles.switchContainer}>
            <Switch
@@ -620,7 +821,17 @@ const Products = () => {
 };
 
 // New Functional Component for Product Items
-const ProductItem = ({ item, onDelete, onEdit, categories }: { item: any; onDelete: (id: string, imageUrl: string | null) => Promise<void>; onEdit: (product: any) => void; categories: Category[]; }) => {
+const ProductItem = ({ 
+  item, 
+  onDelete, 
+  onEdit, 
+  categories 
+}: { 
+  item: any; 
+  onDelete: (id: string, imageUrl: string | null) => Promise<void>; 
+  onEdit: (product: any) => void; 
+  categories: Category[]; 
+}) => {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(50);
 
@@ -636,6 +847,31 @@ const ProductItem = ({ item, onDelete, onEdit, categories }: { item: any; onDele
     translateY.value = withTiming(0, { duration: 500 });
   }, []);
 
+  const handleDeletePress = (id: string, imageUrl: string | null) => {
+    console.log('Delete button pressed with id:', id); // Debug log
+
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this item?",
+      [
+        {
+          text: "Cancel",
+          onPress: () => console.log("Delete canceled"),
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          onPress: async () => {
+            console.log('Deleting item...'); // Debug log
+            await onDelete(id, imageUrl); // Ensure onDelete is awaited
+          },
+          style: "destructive"
+        }
+      ],
+      { cancelable: true }
+    );
+  };
+
   return (
     <Animated.View style={[styles.smallProductCard, animatedStyle]}>
       {item.imageUrl ? (
@@ -644,27 +880,35 @@ const ProductItem = ({ item, onDelete, onEdit, categories }: { item: any; onDele
         <Text>No Image</Text>
       )}
       <View>
-        <Text>Name: {item.name}</Text>
-        <Text>Category: {categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
+        <Text>{item.nameDisplay}</Text>
+        <Text>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
+      </View>
+      <View>
+        <Text>{item.productSize}</Text>
+        <Text>{item.unit}</Text> 
       </View>
       <View>
         <Text>Price: {item.price}</Text>
         <Text style={{ color: item.status ? 'green' : 'red' }}>
-  {item.status ? 'Active' : 'Inactive'}
-</Text>
+          {item.status ? 'Active' : 'Inactive'}
+        </Text>
       </View>
-       
       <View style={styles.buttonGroup}>
-              <TouchableOpacity onPress={() => onEdit(item)} >
-                <AntDesign name="edit" size={24} color="#9969c7" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onDelete(item.id, item.imageUrl)} style={styles.buttonMargin}>
-                <AntDesign name="delete" size={24} color="#9969c7" />
-              </TouchableOpacity>
-            </View>
+        <TouchableOpacity onPress={() => onEdit(item)}>
+          <AntDesign name="edit" size={24} color="#9969c7" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+  onPress={() => handleDeletePress(item.id, item.imageUrl)} 
+  style={styles.buttonMargin}
+  delayPressIn={100} // Add a small delay
+>
+  <AntDesign name="delete" size={24} color="#9969c7" />
+</TouchableOpacity>
+      </View>
     </Animated.View>
   );
 };
+
 const pickerSelectStyles = StyleSheet.create({
   inputIOS: {
     fontSize: 14,
@@ -676,6 +920,7 @@ const pickerSelectStyles = StyleSheet.create({
     borderRadius: 10,
     color: 'black',
     paddingRight: 30, 
+    marginBottom: 10,
   },
   inputAndroid: {
     fontSize: 16,
@@ -688,6 +933,7 @@ const pickerSelectStyles = StyleSheet.create({
     color: 'black',
     paddingRight:   
  30,  
+ marginBottom: 10,
   },
   inputWeb: { 
     fontSize: 14,
@@ -698,6 +944,7 @@ const pickerSelectStyles = StyleSheet.create({
     color: 'black',
     backgroundColor: '#fff', 
     cursor: 'pointer', 
+    marginBottom: 10,
   }
 });
 const styles = StyleSheet.create({
@@ -860,6 +1107,10 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
   },
+  formGroup: {
+    
+  }
+  
 });
 
 export default Products;

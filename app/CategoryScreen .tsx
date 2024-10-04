@@ -12,6 +12,8 @@ import {
   RefreshControl,
   Platform,
   Image,
+  Alert,
+  PermissionsAndroid,
   Easing,
   UIManager,
   ActivityIndicator,
@@ -148,11 +150,6 @@ const CategoryScreen = () => {
     openDrawer();
   };
 
-  const handleDelete = (id: string) => {
-    const deleteRef = ref(database, `categories/${id}`);
-    remove(deleteRef);
-  };
-
   const openDrawer = () => {
     setDrawerVisible(true);
     Animated.timing(drawerAnim, {
@@ -201,7 +198,28 @@ const CategoryScreen = () => {
       setRefreshing(false);
     });
   };
- 
+  const handleDelete = (id: string) => {
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this category?",
+      [
+        {
+          text: "Cancel",
+          onPress: () => console.log("Delete canceled"),
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          onPress: () => {
+            const deleteRef = ref(database, `categories/${id}`);
+            remove(deleteRef);
+          },
+          style: "destructive"
+        }
+      ],
+      { cancelable: true }
+    );
+  };
 
   return (
     <View style={{ flex: 1, padding: 20 }}>
@@ -228,7 +246,7 @@ const CategoryScreen = () => {
     display: 'flex',           // Make it a flex container
   }}
 >
-  <AntDesign name="edit" size={24} color="#fff" />
+  <AntDesign name="edit" size={20} color="#fff" />
 </AddButton>
       </SearchBarContainer>
       {loading ? (
@@ -240,7 +258,7 @@ const CategoryScreen = () => {
           renderItem={({ item }) => (
             <View style={styles.categoryItem}>
               <Text>{item.name}</Text>
-              <Switch
+              <Switch  
                 value={item.status} 
                 onValueChange={(value) => update(ref(database, `categories/${item.id}`), { status: value })}
               />
@@ -249,8 +267,8 @@ const CategoryScreen = () => {
                 <AntDesign name="edit" size={24} color="#9969c7" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.buttonMargin}>
-                <AntDesign name="delete" size={24} color="#9969c7" />
-              </TouchableOpacity>
+  <AntDesign name="delete" size={24} color="#9969c7" />
+</TouchableOpacity>
             </View>
             </View>
           )}
