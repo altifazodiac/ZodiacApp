@@ -5,6 +5,7 @@ import {
   View,
   TextInput,
   Button,
+  Switch,
   FlatList,
   Image,
   Dimensions,
@@ -12,20 +13,29 @@ import {
   TouchableOpacity,
   Modal,
   Platform,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { fetchProducts, addOrUpdateProduct, deleteProduct } from './firebaseFunctions';
+import { fetchProducts, addOrUpdateProduct, deleteProduct, fetchNextPage } from './firebaseFunctions';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
-import { runOnJS } from 'react-native-reanimated';
-
+import { runOnJS } from 'react-native-reanimated'; 
+import { getDatabase, ref as databaseRef, get, update } from 'firebase/database';
+import RNPickerSelect from 'react-native-picker-select'; // Import statement
+import { AntDesign } from '@expo/vector-icons';
+import { database } from './firebase';
+ 
 
 const placeholderImage = 'https://via.placeholder.com/100';
 const { width } = Dimensions.get('window');
 
+type Category = {
+  id: string;
+  name: string;
+};
 const Products = () => {
   const [formDrawerVisible, setFormDrawerVisible] = useState(false);
   const [filterDrawerVisible, setFilterDrawerVisible] = useState(false);
@@ -34,12 +44,15 @@ const Products = () => {
   const [productPrice, setProductPrice] = useState('');
   const [productDescription, setProductDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]); 
   const [costPrice, setCostPrice] = useState('');
+  const [nameDisplay, setNameDisplay] = useState('');
+ const [reorderLevel, setReorderLevel] = useState('');
+ const [unit, setUnit] = useState('');
+ const [productBarcode, setProductBarcode] = useState('');
+ const [productSize, setProductSize] = useState('');
+ const [status, setStatus] = useState<boolean>(false);
   const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState('');
-  const [productBarcode, setProductBarcode] = useState('');
-  const [productSize, setProductSize] = useState('');
-  const [status, setStatus] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -50,6 +63,10 @@ const Products = () => {
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);  
+  const [hasMore, setHasMore] = useState(true);  
+  const [lastKey, setLastKey] = useState<string | null>(null);  
+  const [isImageUploadClicked, setIsImageUploadClicked] = useState(false);
   const itemsPerPage = 10;
   const debounceDelay = 500;
 
@@ -57,6 +74,8 @@ const Products = () => {
   const formDrawerTranslateY = useSharedValue(300);
   const filterDrawerOpacity = useSharedValue(0);
   const filterDrawerTranslateY = useSharedValue(300);
+  
+
 
   const toggleFormDrawer = () => {
     if (!formDrawerVisible) {
@@ -87,7 +106,6 @@ const Products = () => {
       filterDrawerTranslateY.value = withTiming(300, { duration: 500 }); // Slide the drawer down
     }
   };
-
   const formDrawerStyle = useAnimatedStyle(() => {
     return {
       opacity: formDrawerOpacity.value,
@@ -112,29 +130,25 @@ const Products = () => {
     }, debounceDelay);
 
     return () => clearTimeout(searchTimeout);
-  }, [searchName, searchCategory, minPrice, maxPrice, statusFilter, products]);
+  }, [products]);
 
-  const loadProducts = async () => {
+  const loadProducts = async (newPage = 1) => {
+    if (loading) return;
     setLoading(true);
-    const productList = await fetchProducts(itemsPerPage);
-    setProducts(productList);
-    setLoading(false);
-  };
-
-  const handleDeleteProduct = async (id: string, imageUrl: string | null) => {
     try {
-      if (imageUrl) {
-        const storage = getStorage();
-        const imageRef = storageRef(storage, imageUrl);
-        await deleteObject(imageRef);
+      const productList = await fetchProducts(itemsPerPage);
+      if (productList.length < itemsPerPage) {
+        setHasMore(false); // No more pages if the returned list is smaller than requested items per page
       }
-
-      await deleteProduct(id);
-      alert('Product and its image deleted successfully!');
-      loadProducts();
+      if (newPage === 1) {
+        setProducts(productList);
+      } else {
+        setProducts((prevProducts) => [...prevProducts, ...productList]); // Append new products for pagination
+      }
     } catch (error) {
-      console.error('Error deleting product or image: ', error);
-      alert('Error deleting product or image, please try again.');
+      console.error('Error loading products:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -154,107 +168,30 @@ const Products = () => {
 
     toggleFormDrawer();
   };
-
-  const handleImagePick = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert('Permission to access the gallery is required!');
-      return;
-    }
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-    if (!pickerResult.canceled) {
-      const selectedImage = pickerResult.assets[0].uri;
-      setImageUri(selectedImage);
-    }
-  };
-
-  const handleUploadImage = async () => {
-    if (!imageUri) return null;
-
+  const fetchCategories = async () => {
     try {
-      const resizedImage = await ImageManipulator.manipulateAsync(
-        imageUri,
-        [{ resize: { width: 100, height: 100 } }],
-        { compress: 1, format: ImageManipulator.SaveFormat.PNG }
-      );
+      const db = getDatabase();
+      const categoriesRef = databaseRef(db, 'categories'); // Assuming categories are stored under the 'categories' node
+      const snapshot = await get(categoriesRef);
 
-      const storage = getStorage();
-      const response = await fetch(resizedImage.uri);
-      const blob = await response.blob();
-      const storageReference = storageRef(storage, `products/${Date.now()}`);
-      await uploadBytes(storageReference, blob);
-      const downloadUrl = await getDownloadURL(storageReference);
-
-      setImageUrl(downloadUrl);
-      return downloadUrl;
-    } catch (error) {
-      console.error('Image upload failed:', error);
-      alert('Image upload failed. Please try again.');
-      return null;
-    }
-  };
-
-  const handleAddOrUpdateProduct = async () => {
-    if (!productName || !productPrice || !productDescription) {
-      alert('Please fill all product details before submitting.');
-      return;
-    }
-
-    let uploadedImageUrl = imageUrl;
-    if (imageUri && !imageUrl) {
-      uploadedImageUrl = await handleUploadImage();
-    }
-
-    const productData = {
-      name: productName,
-      price: productPrice,
-      description: productDescription,
-      categoryId,
-      costPrice,
-      quantity,
-      unit,
-      productBarcode,
-      productSize,
-      status,
-      imageUrl: uploadedImageUrl || null,
-    };
-
-    try {
-      if (editId) {
-        await addOrUpdateProduct(productData, editId);
-        alert('Product updated successfully!');
+      // Check if snapshot exists and is an object
+      if (snapshot.exists() && typeof snapshot.val() === 'object') {
+        const categoryList: Category[] = Object.entries(snapshot.val()).map(([id, category]) => ({
+          id,
+          name: (category as { name: string }).name, // Cast category to expected shape
+        }));
+        setCategories(categoryList);
       } else {
-        await addOrUpdateProduct(productData, null);
-        alert('Product added successfully!');
+        console.log('No categories found in the database');
       }
-      resetForm();
-      loadProducts();
     } catch (error) {
-      console.error('Error adding/updating product: ', error);
-      alert('There was an error, please try again.');
+      console.error('Error fetching categories:', error);
     }
   };
 
-  const resetForm = () => {
-    setProductName('');
-    setProductPrice('');
-    setProductDescription('');
-    setCategoryId('');
-    setCostPrice('');
-    setQuantity('');
-    setUnit('');
-    setProductBarcode('');
-    setProductSize('');
-    setStatus('');
-    setImageUri(null);
-    setImageUrl(null);
-    setEditId(null);
-  };
-
+  useEffect(() => {
+    fetchCategories(); // Fetch categories when component mounts
+  }, []);
   const handleSearch = () => {
     let filteredList = products;
 
@@ -286,79 +223,316 @@ const Products = () => {
     setFilteredProducts(filteredList);
   };
 
+
+
+  useEffect(() => {
+    loadInitialProducts(); // Load initial products
+  }, []);
+
+  const loadInitialProducts = async () => {
+    setLoading(true);
+    try {
+      const productList = await fetchProducts(itemsPerPage);
+      setProducts(productList);
+      if (productList.length > 0) {
+        const lastProduct = productList[productList.length - 1];
+        setLastKey(lastProduct.id); // Set the last key for fetching the next page
+      }
+      if (productList.length < itemsPerPage) {
+        setHasMore(false); // No more products to load
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMoreProducts = async () => {
+    if (hasMore && !loading && lastKey) {
+      setLoading(true);
+      try {
+        const nextPage = await fetchNextPage(lastKey, itemsPerPage);
+        if (nextPage.length > 0) {
+          setProducts((prevProducts) => [...prevProducts, ...nextPage]); // Append new products
+          const lastProduct = nextPage[nextPage.length - 1];
+          setLastKey(lastProduct.id); // Update the last key
+        }
+        if (nextPage.length < itemsPerPage) {
+          setHasMore(false); // No more pages to load
+        }
+      } catch (error) {
+        console.error('Error loading more products:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, imageUrl: string | null) => {
+    try {
+      await deleteProduct(id);
+      loadInitialProducts(); // Reload products after deletion
+    } catch (error) {
+      console.error('Error deleting product:', error);
+    }
+  };
+
+  const handleImagePick = async () => {
+    setIsImageUploadClicked(true); // Track that the upload button was clicked
+  
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      alert('Permission to access the gallery is required!');
+      return;
+    }
+  
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+  
+    if (!pickerResult.canceled) {
+      const selectedImage = pickerResult.assets[0].uri;
+      setImageUri(selectedImage);
+    }
+  };
+  
+  
+  
+  const handleUploadImage = async (): Promise<string | null> => {
+    if (!imageUri) return null;
+  
+    try {
+      const resizedImage = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 100, height: 100 } }],
+        { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+      );
+  
+      const storage = getStorage();
+      const response = await fetch(resizedImage.uri);
+      const blob = await response.blob();
+  
+      const storageReference = storageRef(storage, `products/${Date.now()}`);
+      await uploadBytes(storageReference, blob);
+      const downloadUrl = await getDownloadURL(storageReference);
+  
+      setImageUrl(downloadUrl);
+      return downloadUrl;
+    } catch (error) {
+      // Check if 'error' is an instance of Error to safely access 'message'
+      if (error instanceof Error) {
+        console.error('Image upload failed:', error.message);
+        alert(`Image upload failed: ${error.message}`);
+      } else {
+        console.error('Image upload failed:', error); // Handle non-standard errors
+        alert('Image upload failed. Please try again.');
+      }
+      return null;
+    }
+  };
+  
+  
+  const handleAddOrUpdateProduct = async () => {
+    // Check for required fields
+    if (!productName || !productPrice || !productDescription) {
+      alert('Please fill all product details before submitting.');
+      return;
+    }
+  
+    let uploadedImageUrl = imageUrl; // Default to the existing imageUrl
+  
+    // If user clicked the upload button and selected a new image, handle the image upload
+    if (isImageUploadClicked && imageUri && imageUri !== imageUrl) {
+      uploadedImageUrl = await handleUploadImage(); // Upload new image
+      if (!uploadedImageUrl) {
+        return; // Stop if image upload fails
+      }
+    }
+  
+    // Make sure imageUrl is included in product data, even if no new image was uploaded
+    const productData = {
+      name: productName,
+      price: productPrice,
+      description: productDescription,
+      categoryId, // Ensure categoryId is correct and available
+      costPrice,
+      quantity,
+      unit,
+      productBarcode,
+      productSize,
+      status,
+      imageUrl: uploadedImageUrl || imageUrl, // Ensure imageUrl is not lost
+    };
+  
+    try {
+      // Update or add the product in Firebase
+      if (editId) {
+        await addOrUpdateProduct(productData, editId); // Updating product
+        alert('Product updated successfully!');
+      } else {
+        await addOrUpdateProduct(productData, null); // Adding new product
+        alert('Product added successfully!');
+      }
+      resetForm(); // Reset the form after successful submission
+      loadProducts(); // Reload the product list
+    } catch (error) {
+      if (error instanceof Error) {
+        // Safely access 'message' since 'error' is an instance of 'Error'
+        alert(`Error: ${error.message}`);
+        console.error('Error adding/updating product:', error.message);
+      } else {
+        // Handle non-standard errors
+        alert('An unknown error occurred.');
+        console.error('Error adding/updating product:', error);
+      }
+    }
+  };
+  
+  
+  const resetForm = () => {
+    setProductName('');
+    setProductPrice('');
+    setProductDescription('');
+    setCategoryId('');
+    setCostPrice('');
+    setQuantity('');
+    setUnit('');
+    setProductBarcode('');
+    setProductSize('');
+    setStatus(false);
+    setImageUri(null);
+    setImageUrl(null);
+    setEditId(null);
+    setIsImageUploadClicked(false);
+  };
+  
   const renderFormDrawerContent = () => (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={styles.card}>
-        <Text style={styles.drawerHeading}>
-          {editId ? 'Edit Product' : 'Add New Product'}
-        </Text>
-
-        <View style={styles.imagePreview}>
-          <Image
-            source={{ uri: imageUri ? imageUri : placeholderImage }}
-            style={styles.image}
+      <ScrollView contentContainerStyle={styles.scrollViewContainer}>  
+        <View style={styles.card}>
+          <Text style={styles.drawerHeading}>
+            {editId ? 'Edit Product' : 'Add New Product'}
+          </Text>
+  
+          <View style={styles.imagePreview}>
+            <Image
+              source={{ uri: imageUri ? imageUri : placeholderImage }}
+              style={styles.image}
+            />
+            {imageUri && (
+              <TouchableOpacity onPress={() => setImageUri(null)} style={styles.removeButton}>
+                <Icon name="trash" size={16} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
+            <Icon name="upload" size={18} color="#fff" />
+            <Text style={styles.uploadButtonText}>Upload Image</Text>
+          </TouchableOpacity>
+          <View style={styles.inputContainer}>
+          <RNPickerSelect
+      placeholder={{ label: "Select a Category" }}
+      items={categories.map(category => ({ label: category.name, value: category.id }))}
+      onValueChange={(value) => setCategoryId(value)}
+      style={{ ...pickerSelectStyles, 
+              iconContainer: { 
+                top: 10,
+                right: 10,
+              }
+            }} 
+      value={categoryId}
+      useNativeAndroidPickerStyle={false} 
+    /> 
+</View>
+           <TextInput
+            style={styles.input}
+            placeholder="Product Name"
+            value={productName}
+            onChangeText={setProductName}
           />
-          {imageUri && (
-            <TouchableOpacity onPress={() => setImageUri(null)} style={styles.removeButton}>
-              <Icon name="trash" size={16} color="#fff" />
+          <TextInput
+            style={styles.input}
+            placeholder="Display Name"
+            value={nameDisplay} 
+            onChangeText={setNameDisplay} 
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Product Price"
+            value={productPrice}
+            onChangeText={setProductPrice}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Product Description"
+            value={productDescription}
+            onChangeText={setProductDescription}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Cost Price"
+            value={costPrice}
+            onChangeText={setCostPrice}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Quantity"
+            value={quantity}
+            onChangeText={setQuantity}
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Reorder Level"  
+            value={reorderLevel}  
+            onChangeText={setReorderLevel}  
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Unit"  
+            value={unit} 
+            onChangeText={setUnit}  
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Product Barcode"  
+            value={productBarcode} 
+            onChangeText={setProductBarcode} 
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Product Size" 
+            value={productSize} 
+            onChangeText={setProductSize}  
+          />
+           <View style={styles.switchContainer}>
+           <Switch
+              value={status}
+              onValueChange={setStatus}
+              style={styles.switch}
+            />
+            <Text style={styles.switchLabel}>{status ? 'Active' : 'Inactive'}</Text>
+          </View>
+  
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.button} onPress={handleAddOrUpdateProduct}>
+              <Text style={styles.buttonText}>{editId ? 'Update' : 'Submit'}</Text>
             </TouchableOpacity>
-          )}
+            <TouchableOpacity style={styles.button} onPress={toggleFormDrawer}>
+              <Text style={styles.buttonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
-          <Icon name="upload" size={18} color="#fff" />
-          <Text style={styles.uploadButtonText}>Upload Image</Text>
-        </TouchableOpacity>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Product Name"
-          value={productName}
-          onChangeText={setProductName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Product Price"
-          value={productPrice}
-          onChangeText={setProductPrice}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Product Description"
-          value={productDescription}
-          onChangeText={setProductDescription}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Category ID"
-          value={categoryId}
-          onChangeText={setCategoryId}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Cost Price"
-          value={costPrice}
-          onChangeText={setCostPrice}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Quantity"
-          value={quantity}
-          onChangeText={setQuantity}
-          keyboardType="numeric"
-        />
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={handleAddOrUpdateProduct}>
-            <Text style={styles.buttonText}>{editId ? 'Update' : 'Submit'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={toggleFormDrawer}>
-            <Text style={styles.buttonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      </ScrollView>
     </GestureHandlerRootView>
   );
+  
 
   const renderFilterDrawerContent = () => (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -401,7 +575,6 @@ const Products = () => {
       </View>
     </GestureHandlerRootView>
   );
-
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
@@ -426,37 +599,107 @@ const Products = () => {
       </Modal>
 
       <FlatList
-        data={filteredProducts.length > 0 ? filteredProducts : products}
-        renderItem={({ item }) => (
-          <View style={styles.smallProductCard}>
-            {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={styles.smallProductImage} />
-            ) : (
-              <Text>No Image</Text>
-            )}
-            <View>
-              <Text>Name: {item.name}</Text>
-              <Text>Category: {item.categoryId}</Text>
-            </View>
-            <View>
-              <Text>Price: {item.price}</Text>
-              <Text>Status: {item.status}</Text>
-            </View>
-            <View>
-              <Icon name="pencil" size={20} onPress={() => handleEditProduct(item)} />
-              <Icon name="trash" size={20} onPress={() => handleDeleteProduct(item.id, item.imageUrl)} />
-            </View>
-          </View>
-        )}
-        keyExtractor={(item) => item.id}
-        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-        numColumns={1}
-      />
-      {loading && <ActivityIndicator />}
+  data={products}
+  renderItem={({ item }) => (
+    <ProductItem 
+      item={item} 
+      onDelete={handleDeleteProduct} 
+      onEdit={handleEditProduct} 
+      categories={categories} 
+    />
+  )}
+  keyExtractor={(item) => item.id}
+  ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+  onEndReached={loadMoreProducts}
+  onEndReachedThreshold={0.5}
+  ListFooterComponent={loading ? <ActivityIndicator size="large" color="#9969c7" /> : null}
+/>
+      {loading && products.length === 0 && <ActivityIndicator size="large" color="#9969c7" />}
     </View>
   );
 };
 
+// New Functional Component for Product Items
+const ProductItem = ({ item, onDelete, onEdit, categories }: { item: any; onDelete: (id: string, imageUrl: string | null) => Promise<void>; onEdit: (product: any) => void; categories: Category[]; }) => {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(50);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: opacity.value,
+      transform: [{ translateY: translateY.value }],
+    };
+  });
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 500 });
+    translateY.value = withTiming(0, { duration: 500 });
+  }, []);
+
+  return (
+    <Animated.View style={[styles.smallProductCard, animatedStyle]}>
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.smallProductImage} />
+      ) : (
+        <Text>No Image</Text>
+      )}
+      <View>
+        <Text>Name: {item.name}</Text>
+        <Text>Category: {categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
+      </View>
+      <View>
+        <Text>Price: {item.price}</Text>
+        <Text style={{ color: item.status ? 'green' : 'red' }}>
+  {item.status ? 'Active' : 'Inactive'}
+</Text>
+      </View>
+       
+      <View style={styles.buttonGroup}>
+              <TouchableOpacity onPress={() => onEdit(item)} >
+                <AntDesign name="edit" size={24} color="#9969c7" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onDelete(item.id, item.imageUrl)} style={styles.buttonMargin}>
+                <AntDesign name="delete" size={24} color="#9969c7" />
+              </TouchableOpacity>
+            </View>
+    </Animated.View>
+  );
+};
+const pickerSelectStyles = StyleSheet.create({
+  inputIOS: {
+    fontSize: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor:   
+ '#ddd',
+    borderRadius: 10,
+    color: 'black',
+    paddingRight: 30, 
+  },
+  inputAndroid: {
+    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 0.5,
+    borderColor:   
+ 'gray',
+    borderRadius: 8,
+    color: 'black',
+    paddingRight:   
+ 30,  
+  },
+  inputWeb: { 
+    fontSize: 14,
+    padding: 10, 
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    color: 'black',
+    backgroundColor: '#fff', 
+    cursor: 'pointer', 
+  }
+});
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -471,7 +714,7 @@ const styles = StyleSheet.create({
   drawerToggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007bff',
+    backgroundColor: '#9969c7',
     padding: 10,
     borderRadius: 5,
     marginBottom: 10,
@@ -509,7 +752,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007BFF',
+    backgroundColor: '#9969c7',
     marginTop: 10,
     marginLeft: 'auto',
     marginRight: 'auto',
@@ -572,7 +815,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 5,
     padding: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#9969c7',
     borderRadius: 20,
     alignItems: 'center',
   },
@@ -591,6 +834,31 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  scrollViewContainer: {
+    paddingBottom: 20,  
+  },
+  inputContainer: {
+    marginBottom: 10,
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+   
+  },
+  buttonMargin: {
+    marginLeft: 15,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  switch: {
+    marginRight: 10,
+  },
+  switchLabel: {
+    fontSize: 16,
   },
 });
 

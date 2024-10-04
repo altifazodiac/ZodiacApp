@@ -2,10 +2,11 @@ import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
-import { Colors } from '@/constants/Colors';  
-import { useColorScheme } from '@/hooks/useColorScheme'; 
+import { Colors } from '../constants/Colors';  
+import { useColorScheme } from '../hooks/useColorScheme'; 
 import Login from './login';  
 import Products from './products';  
+import CategoryScreen from './CategoryScreen ';
 
 const Drawer = createDrawerNavigator();
 
@@ -46,6 +47,16 @@ const DrawerLayout = () => {
           ),
         }}
         component={Products}  
+      />
+       <Drawer.Screen
+        name="CategoryScreen "
+        options={{
+          title: 'Categories',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={CategoryScreen}  
       />
     </Drawer.Navigator>
   );

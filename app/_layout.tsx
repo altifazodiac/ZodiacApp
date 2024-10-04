@@ -3,7 +3,7 @@ import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import DrawerLayout from './DrawerLayout';  
-import { useColorScheme } from '@/hooks/useColorScheme';  
+import { useColorScheme } from '../hooks/useColorScheme';  
 
  
 SplashScreen.preventAutoHideAsync();
