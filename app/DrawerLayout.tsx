@@ -7,6 +7,7 @@ import { useColorScheme } from '../hooks/useColorScheme';
 import Login from './login';  
 import Products from './products';  
 import CategoryScreen from './CategoryScreen ';
+import PosOrders from './PosOrders';
 
 const Drawer = createDrawerNavigator();
 
@@ -28,6 +29,7 @@ const DrawerLayout = () => {
         ),
       })}
     >
+      
       <Drawer.Screen
         name="login"
         options={{
@@ -38,15 +40,15 @@ const DrawerLayout = () => {
         }}
         component={Login}  
       />
-      <Drawer.Screen
-        name="products"
+       <Drawer.Screen
+        name="PosOrders"
         options={{
-          title: 'Products',
+          title: 'Orders',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            <Ionicons name={focused ? 'menu' : 'menu-outline'} color={color} size={24} />
           ),
         }}
-        component={Products}  
+        component={PosOrders}  
       />
        <Drawer.Screen
         name="CategoryScreen "
@@ -58,6 +60,17 @@ const DrawerLayout = () => {
         }}
         component={CategoryScreen}  
       />
+      <Drawer.Screen
+        name="products"
+        options={{
+          title: 'Products',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={Products}  
+      />
+      
     </Drawer.Navigator>
   );
 };

@@ -58,16 +58,18 @@ const Products = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
-  const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
   const [searchName, setSearchName] = useState('');
   const [searchCategory, setSearchCategory] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [minQuantity, setMinQuantity] = useState('');
+  const [maxQuantity, setMaxQuantity] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);  
   const [hasMore, setHasMore] = useState(true);  
   const [lastKey, setLastKey] = useState<string | null>(null);  
   const [isImageUploadClicked, setIsImageUploadClicked] = useState(false);
+  const [filteredProducts, setFilteredProducts] = useState(products);
   const itemsPerPage = 10;
   const debounceDelay = 500;
 
@@ -127,7 +129,7 @@ const Products = () => {
 
   useEffect(() => {
     const searchTimeout = setTimeout(() => {
-      handleSearch();
+      applyFilter();
     }, debounceDelay);
 
     return () => clearTimeout(searchTimeout);
@@ -199,39 +201,60 @@ const Products = () => {
   useEffect(() => {
     fetchCategories(); // Fetch categories when component mounts
   }, []);
-  const handleSearch = () => {
-    let filteredList = products;
-
+  const applyFilter = () => {
+    let filtered = products;
+  
+    // Filter by product name
     if (searchName) {
-      filteredList = filteredList.filter((product) =>
-        product.name.toLowerCase().includes(searchName.toLowerCase())
+      filtered = filtered.filter(product =>
+        product.nameDisplay.toLowerCase().includes(searchName.toLowerCase())
       );
     }
-
+  
+    // Filter by category
     if (searchCategory) {
-      filteredList = filteredList.filter((product) =>
-        product.categoryId.toLowerCase().includes(searchCategory.toLowerCase())
+      filtered = filtered.filter(product =>
+        product.categoryId === searchCategory
       );
     }
-
+  
+    // Filter by min price
     if (minPrice) {
-      filteredList = filteredList.filter((product) => parseFloat(product.price) >= parseFloat(minPrice));
-    }
-    if (maxPrice) {
-      filteredList = filteredList.filter((product) => parseFloat(product.price) <= parseFloat(maxPrice));
-    }
-
-    if (statusFilter) {
-      filteredList = filteredList.filter((product) =>
-        product.status.toLowerCase().includes(statusFilter.toLowerCase())
+      filtered = filtered.filter(product =>
+        parseFloat(product.price) >= parseFloat(minPrice)
       );
     }
+  
+    // Filter by max price
+    if (maxPrice) {
+      filtered = filtered.filter(product =>
+        parseFloat(product.price) <= parseFloat(maxPrice)
+      );
+    }
+   // Filter by min price
+   if (minQuantity) {
+    filtered = filtered.filter(product =>
+      parseFloat(product.Quantity) >= parseFloat(minQuantity)
+    );
+  }
 
-    setFilteredProducts(filteredList);
+  // Filter by max price
+  if (maxQuantity) {
+    filtered = filtered.filter(product =>
+      parseFloat(product.Quantity) <= parseFloat(maxQuantity)
+    );
+  }
+    setFilteredProducts(filtered);
   };
-
-
-
+  const resetFilters = () => {
+    setSearchName('');
+    setSearchCategory('');
+    setMinPrice('');
+    setMaxPrice('');
+    setMinQuantity('');
+    setMaxQuantity('');
+    setFilteredProducts(products); // Reset filtered products
+  };
   useEffect(() => {
     loadInitialProducts(); // Load initial products
   }, []);
@@ -381,7 +404,7 @@ const Products = () => {
   };
   
   const handleAddOrUpdateProduct = async () => {
-    if (!productName || !productPrice || !productDescription) {
+    if (!productName || !productPrice || !nameDisplay || !categoryId || !quantity || !unit || !productSize) {
       alert('Please fill all product details before submitting.');
       return;
     }
@@ -494,7 +517,7 @@ const Products = () => {
   
     return (
       <RNPickerSelect
-        placeholder={{ label: 'Select a Unit', value: null }} // Update placeholder text
+        placeholder={{ label: 'Select a Unit', value: ''}} // Update placeholder text
         items={units}
         onValueChange={(value) => setUnit(value)} // Use setUnit to update the unit state
         style={{
@@ -593,7 +616,7 @@ const Products = () => {
   const ProductSizeSelector = ({ productSize, setProductSizes }: ProductSizesSelectorProps) => {
     return (
       <RNPickerSelect
-        placeholder={{ label: "Select a Product Size", value: null }} // Placeholder text
+        placeholder={{ label: "Select a Product Size", value: '' }} // Placeholder text
         items={productSizes} // The defined product sizes
         onValueChange={(value) => setProductSize(value)} // Update the state on selection
         style={{ 
@@ -701,17 +724,18 @@ const Products = () => {
          <UnitSelector unit={unit} setUnit={setUnit} />
           <TextInput
             style={styles.input}
-            placeholder="Product Barcode"  
+            placeholder="Product Barcode (optional)"  
             value={productBarcode} 
             onChangeText={setProductBarcode} 
           />
           
-            <TextInput
-            style={styles.input}
-            placeholder="Description"
-            value={productDescription}
-            onChangeText={setProductDescription}
-          />
+          <TextInput
+  style={styles.input}
+  placeholder="Description (optional)"  // Clarify that it's optional
+  value={productDescription}
+  onChangeText={setProductDescription}
+/>
+
            <View style={styles.switchContainer}>
            <Switch
               value={status}
@@ -725,49 +749,92 @@ const Products = () => {
             <TouchableOpacity style={styles.button} onPress={handleAddOrUpdateProduct}>
               <Text style={styles.buttonText}>{editId ? 'Update' : 'Submit'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={toggleFormDrawer}>
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
+            <TouchableOpacity
+  style={styles.button}
+  onPress={() => {
+    toggleFormDrawer();
+    resetForm();
+  }}
+>
+  <Text style={styles.buttonText}>Close</Text>
+</TouchableOpacity>
           </View>
         </View>
       </ScrollView>
     </GestureHandlerRootView>
   );
   
-
   const renderFilterDrawerContent = () => (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.card}>
         <Text style={styles.drawerHeading}>Filter Products</Text>
+  
         <TextInput
           style={styles.input}
           placeholder="Search by Product Name"
           value={searchName}
           onChangeText={setSearchName}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Search by Category"
+  
+        <RNPickerSelect
+          placeholder={{ label: "Search by Category", value: '' }}
+          items={categories.map(category => ({ label: category.name, value: category.id }))}
+          onValueChange={(value) => setSearchCategory(value)}
+          style={{
+            ...pickerSelectStyles,
+            iconContainer: {
+              top: 10,
+              right: 10,
+            },
+          }}
           value={searchCategory}
-          onChangeText={setSearchCategory}
+          useNativeAndroidPickerStyle={false}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Min Price"
-          value={minPrice}
-          onChangeText={setMinPrice}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Max Price"
-          value={maxPrice}
-          onChangeText={setMaxPrice}
-          keyboardType="numeric"
-        />
+  <View style={styles.PriceContainer}> 
+  <TextInput
+    style={styles.inputHalf}  // Use inputHalf style
+    placeholder="Min Price"
+    value={minPrice}
+    onChangeText={setMinPrice}
+    keyboardType="numeric"
+  />
+  <TextInput
+    style={styles.inputHalf}  // Use inputHalf style
+    placeholder="Max Price"
+    value={maxPrice}
+    onChangeText={setMaxPrice}
+    keyboardType="numeric"
+  />
+  </View>
+   <View style={styles.PriceContainer}> 
+  <TextInput
+    style={styles.inputHalf}  // Use inputHalf style
+    placeholder="Min Quantity"
+    value={minQuantity}
+    onChangeText={setMinQuantity}
+    keyboardType="numeric"
+  />
+  <TextInput
+    style={styles.inputHalf}  // Use inputHalf style
+    placeholder="Max Quantity"
+    value={maxQuantity}
+    onChangeText={setMaxQuantity}
+    keyboardType="numeric"
+  />
+</View>
         <View style={styles.buttonContainer}>
-          <TouchableOpacity onPress={() => console.log('Filtering')} style={styles.button}>
-            <Text style={styles.buttonText}>Search</Text>
+        <TouchableOpacity 
+  onPress={() => {
+    applyFilter();  // First apply the filter
+    toggleFilterDrawer();  // Then toggle the drawer
+  }} 
+  style={styles.button}
+>
+  <Text style={styles.buttonText}>Search</Text>
+</TouchableOpacity>
+
+          <TouchableOpacity onPress={resetFilters} style={styles.button}>
+            <Text style={styles.buttonText}>Reset</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleFilterDrawer} style={styles.button}>
             <Text style={styles.buttonText}>Close</Text>
@@ -778,46 +845,49 @@ const Products = () => {
   );
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
-        <Icon name="filter" size={20} color="#fff" />
-        <Text style={styles.drawerToggleText}>Show Filters</Text>
-      </TouchableOpacity>
+       <View style={styles.PriceContainer}> 
+      
+    <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
+      <Icon name="filter" size={20} color="#fff" />
+      <Text style={styles.drawerToggleText}>Show Filters</Text>
+    </TouchableOpacity>
+    <TouchableOpacity onPress={toggleFormDrawer} style={styles.drawerToggleButton}>
+      <Icon name="plus" size={20} color="#fff" />
+      <Text style={styles.drawerToggleText}>Add New Item</Text>
+    </TouchableOpacity>
+</View>
+    <Modal visible={formDrawerVisible} transparent={true} animationType="none">
+      <Animated.View style={[styles.modal, formDrawerStyle]}>
+        {renderFormDrawerContent()}
+      </Animated.View>
+    </Modal>
 
-      <TouchableOpacity onPress={toggleFormDrawer} style={styles.drawerToggleButton}>
-        <Icon name="plus" size={20} color="#fff" />
-        <Text style={styles.drawerToggleText}>Add New Item</Text>
-      </TouchableOpacity>
+    <Modal visible={filterDrawerVisible} transparent={true} animationType="none">
+      <Animated.View style={[styles.modal, filterDrawerStyle]}>
+        {renderFilterDrawerContent()}
+      </Animated.View>
+    </Modal>
 
-      <Modal visible={formDrawerVisible} transparent={true} animationType="none">
-        <Animated.View style={[styles.modal, formDrawerStyle]}>
-          {renderFormDrawerContent()}
-        </Animated.View>
-      </Modal>
-      <Modal visible={filterDrawerVisible} transparent={true} animationType="none">
-        <Animated.View style={[styles.modal, filterDrawerStyle]}>
-          {renderFilterDrawerContent()}
-        </Animated.View>
-      </Modal>
-
-      <FlatList
-  data={products}
-  renderItem={({ item }) => (
-    <ProductItem 
-      item={item} 
-      onDelete={handleDeleteProduct} 
-      onEdit={handleEditProduct} 
-      categories={categories} 
+    <FlatList
+      data={filteredProducts}
+      renderItem={({ item }) => (
+        <ProductItem
+          item={item}
+          onDelete={handleDeleteProduct}
+          onEdit={handleEditProduct}
+          categories={categories}
+        />
+      )}
+      keyExtractor={(item) => item.id}
+      ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+      onEndReached={loadMoreProducts}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={loading ? <ActivityIndicator size="large" color="#9969c7" /> : null}
     />
-  )}
-  keyExtractor={(item) => item.id}
-  ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-  onEndReached={loadMoreProducts}
-  onEndReachedThreshold={0.5}
-  ListFooterComponent={loading ? <ActivityIndicator size="large" color="#9969c7" /> : null}
-/>
-      {loading && products.length === 0 && <ActivityIndicator size="large" color="#9969c7" />}
-    </View>
-  );
+
+    {loading && products.length === 0 && <ActivityIndicator size="large" color="#9969c7" />}
+  </View>
+);
 };
 
 // New Functional Component for Product Items
@@ -884,8 +954,8 @@ const ProductItem = ({
         <Text>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
       </View>
       <View>
-        <Text>{item.productSize}</Text>
-        <Text>{item.unit}</Text> 
+        <Text>Size: {item.productSize}</Text>
+        <Text>Unit: {item.unit}</Text> 
       </View>
       <View>
         <Text>Price: {item.price}</Text>
@@ -1041,7 +1111,7 @@ const styles = StyleSheet.create({
     padding: 10,
     flexWrap: 'wrap',
     backgroundColor: 'white',
-    borderRadius: 8,
+    borderRadius: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -1057,6 +1127,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
+  },
+  PriceContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',  // Ensure container takes full width
+    marginTop: 10,
+  },
+  inputHalf: {
+    width: '48%',  // Each input takes up 48% of the width
+    paddingHorizontal: 10, // Add padding inside inputs if needed
+    borderWidth: 1,  // Add border or other styles as needed
+    borderColor: '#ccc',
+    borderRadius: 10,
+    paddingVertical: 8, // Adjust height if needed
   },
   button: {
     flex: 1,

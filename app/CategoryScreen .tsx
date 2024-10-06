@@ -228,7 +228,7 @@ const CategoryScreen = () => {
           value={searchQuery}
           onChangeText={handleSearchChange}
           placeholder="Search categories"
-          accessibilityLabel="Search categories"
+          accessibilityLabel="Search categories" 
         />
         {searchQuery !== '' && (
           <ClearButton onPress={resetSearch} accessibilityRole="button" accessibilityLabel="Clear search input">
@@ -328,8 +328,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     marginVertical: 5,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   drawer: {
     position: 'absolute',
