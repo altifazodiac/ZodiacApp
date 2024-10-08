@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getStorage } from 'firebase/storage';
-import { getDatabase } from 'firebase/database'; // Optional, for saving URL to Realtime DB
+import { getDatabase, ref, onValue } from 'firebase/database'; // Optional, for saving URL to Realtime DB
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -17,5 +17,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 const database = getDatabase(app); // Optional if you're storing URLs in Realtime DB
+const db = getDatabase(app);
 
-export { storage, database };
+export { storage, database, db, ref, onValue };

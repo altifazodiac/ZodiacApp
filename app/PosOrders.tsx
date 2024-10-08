@@ -1,188 +1,283 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, Image, Animated, PanResponder, Easing } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, Image, Animated, PanResponder, Easing, ScrollView, Platform } from 'react-native';
+import { db, ref, onValue } from './firebase';
+import { Ionicons } from '@expo/vector-icons';
+ 
 
 type Product = {
   id: string;
-  name: string;
+  nameDisplay: string;
   price: string;
-  category: string;
+  imageUrl: string | null;
+ // productSize : string;
+  categoryId: string;
 };
 
-const productsData: Product[] = [
-  { id: '1', name: 'Product 1', price: '10', category: 'Electronics' },
-  { id: '2', name: 'Product 2', price: '20', category: 'Clothing' },
-  { id: '3', name: 'Product 3', price: '15', category: 'Electronics' },
-  { id: '4', name: 'Product 4', price: '30', category: 'Clothing' },
-  { id: '5', name: 'Product 5', price: '10', category: 'Electronics' },
-  { id: '6', name: 'Product 6', price: '20', category: 'Clothing' },
-  { id: '7', name: 'Product 7', price: '15', category: 'Electronics' },
-  { id: '8', name: 'Product 8', price: '30', category: 'Clothing' },
-];
+type Category = {
+  id: string;
+  name: string;
+};
+interface ProductData {
+  nameDisplay: string;
+  price: string;
+  imageUrl: string | null;
+  //productSize : string;
+  categoryId: string;
+}
 
 const PosOrders = () => {
-  const calculateNumColumns = () => {
+  const calculateNumColumns = useCallback(() => {
     const screenWidth = Dimensions.get('window').width;
-    if (screenWidth < 500) {
-      return 3;
-    } else if (screenWidth < 900) {
-      return 4;
-    } else {
-      return 6;
-    }
-  };
+    if (screenWidth < 500) return 3;
+    if (screenWidth < 900) return 4;
+    return 6;
+  }, []);
 
   const [numColumns, setNumColumns] = useState(calculateNumColumns());
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [orderItems, setOrderItems] = useState<Product[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State for drawer toggle
-  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width); // Track window width
-  const drawerHeight = useRef(new Animated.Value(0)).current; // Animated height for drawer
-  const drawerOpacity = useRef(new Animated.Value(0)).current; // Animated opacity for drawer
-  const pan = useRef(new Animated.ValueXY()).current; // PanResponder value
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
 
-  const subtotal = orderItems.reduce((sum, item) => sum + parseFloat(item.price), 0);
-  const discount = subtotal > 50 ? 5 : 0;
-  const total = subtotal - discount;
+  const drawerHeight = useRef(new Animated.Value(0)).current;
+  const drawerOpacity = useRef(new Animated.Value(0)).current;
+  const screenHeight = Dimensions.get('window').height;
 
-  const categories = ['All', 'Electronics', 'Clothing'];
+  const pan = useRef(new Animated.ValueXY()).current;
 
-  const filteredProducts = selectedCategory
-    ? productsData.filter(product => product.category === selectedCategory)
-    : productsData;
+  // Fetch categories and products from Firebase
+  useEffect(() => {
+    const categoriesRef = ref(db, 'categories');
+    const productsRef = ref(db, 'products');
 
-  const addItemToOrder = (product: Product) => {
-    setOrderItems([...orderItems, product]);
-  };
+    const categoriesListener = onValue(categoriesRef, (snapshot) => {
+      const categoriesData = snapshot.val();
+      const formattedCategories = categoriesData
+        ? Object.keys(categoriesData).map((key) => ({
+            id: key, // Use the key as the categoryId
+            name: categoriesData[key].name,
+          }))
+        : [];
+      setCategories([{ id: 'All', name: 'All' }, ...formattedCategories]);
+    });
 
-  const removeItemFromOrder = (id: string) => {
-    setOrderItems(orderItems.filter(item => item.id !== id));
-  };
+    const productsListener = onValue(productsRef, (snapshot) => {
+      const productsData = snapshot.val();
+      const formattedProducts = productsData
+        ? Object.entries(productsData).map(([id, product]) => {
+            const productData = product as ProductData; // Type assertion
+            return {
+              id,
+              nameDisplay: productData.nameDisplay,
+             // productSize : productData.productSize,
+              price: productData.price,
+              imageUrl: productData.imageUrl,
+              categoryId: productData.categoryId,
+            };
+          })
+        : [];
+      setProducts(formattedProducts);
+    });
 
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <TouchableOpacity onPress={() => {
-      addItemToOrder(item);
-      toggleDrawer();
-    }}>
-    <View style={styles.card}>
-      <Image source={{ uri: 'https://via.placeholder.com/100' }} style={styles.cardImage} />
-      <Text style={styles.cardTitle}>{item.name}</Text>
-      <Text style={styles.cardPrice}>${item.price}</Text>
-    </View>
-  </TouchableOpacity>   
-  );
+    return () => {
+      categoriesListener();
+      productsListener();
+    };
+  }, []);
 
+  // Handle window resize for dynamic columns
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(Dimensions.get('window').width);
-      const newNumColumns = calculateNumColumns();
-      setNumColumns(newNumColumns);
+      setNumColumns(calculateNumColumns());
     };
 
     const subscription = Dimensions.addEventListener('change', handleResize);
     return () => {
       subscription.remove();
     };
-  }, [numColumns]);
+  }, [calculateNumColumns]);
 
   const isMobile = windowWidth <= 768;
-  const screenHeight = Dimensions.get('window').height;
-  // Function to handle drawer animation (toggle)
+
+  // Filter products based on selected categoryId
+  const filteredProducts = selectedCategory && selectedCategory !== 'All'
+    ? products.filter((product) => product.categoryId === selectedCategory)
+    : products;
+
+  const addItemToOrder = (product: Product) => setOrderItems([...orderItems, product]);
+  const removeItemFromOrder = (id: string) => setOrderItems(orderItems.filter((item) => item.id !== id));
+
+  const renderProductItem = ({ item }: { item: Product }) => (
+    <TouchableOpacity onPress={() => {
+      addItemToOrder(item);
+      toggleDrawer();
+    }}>
+      <View style={styles.card}>
+        <Image source={{ uri: item.imageUrl || 'https://via.placeholder.com/100' }} style={styles.cardImage} />
+        <Text style={styles.cardTitle}>{item.nameDisplay}</Text>
+        <Text style={styles.cardPrice}>${item.price}</Text>
+      </View>
+    </TouchableOpacity>   
+  );
+
   const toggleDrawer = () => {
     if (isDrawerOpen) {
       Animated.parallel([
         Animated.timing(drawerHeight, {
           toValue: 0,
           duration: 400,
-          useNativeDriver: false,  
-          easing: Easing.inOut(Easing.ease), // Add easing
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
         }),
         Animated.timing(drawerOpacity, {
-          toValue: 0, 
+          toValue: 0,
           duration: 400,
-          useNativeDriver: false,  
-          easing: Easing.inOut(Easing.ease),  
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
         }),
       ]).start(() => setIsDrawerOpen(false));
     } else {
       setIsDrawerOpen(true);
       Animated.parallel([
         Animated.timing(drawerHeight, {
-          toValue: screenHeight * 1.2,  
+          toValue: screenHeight * 1.2,
           duration: 300,
-          useNativeDriver: false,  
-          easing: Easing.out(Easing.ease),  
+          useNativeDriver: false,
+          easing: Easing.out(Easing.ease),
         }),
         Animated.timing(drawerOpacity, {
           toValue: 1,
-          duration: 300, 
-          useNativeDriver: false,  
-          easing: Easing.out(Easing.ease),  
+          duration: 300,
+          useNativeDriver: false,
+          easing: Easing.out(Easing.ease),
         }),
       ]).start();
     }
   };
 
-  // PanResponder for swipe gesture
   const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (evt, gestureState) => {
-      return Math.abs(gestureState.dy) > 20; // Detect vertical swipe
-    },
+    onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dy) > 20,
     onPanResponderMove: (evt, gestureState) => {
       if (!isDrawerOpen && gestureState.dy < 0) {
-        // Swiping up when drawer is closed
         Animated.event([null, { dy: drawerHeight }], { useNativeDriver: false })(evt, gestureState);
       } else if (isDrawerOpen && gestureState.dy > 0) {
-        // Swiping down when drawer is open
         Animated.event([null, { dy: drawerHeight }], { useNativeDriver: false })(evt, gestureState);
       }
     },
     onPanResponderRelease: (evt, gestureState) => {
       if (!isDrawerOpen && gestureState.dy < -50) {
-        // Open drawer after swipe up
         toggleDrawer();
       } else if (isDrawerOpen && gestureState.dy > 50) {
-        // Close drawer after swipe down
         toggleDrawer();
       }
     },
   });
 
+  const subtotal = orderItems.reduce((sum, item) => sum + parseFloat(item.price), 0);
+  const discount = subtotal > 50 ? 5 : 0;
+  const total = subtotal - discount;
+
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
       <View style={isMobile ? styles.layoutMobile : styles.layout1}>
+    
+    {Platform.OS === 'web' ? (
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <View style={styles.productListContainer}>
+           
           <View style={styles.tabsContainer}>
-            {categories.map(category => (
+            {categories.map((category) => (
               <TouchableOpacity
-                key={category}
-                style={selectedCategory === category ? styles.tabActive : styles.tab}
-                onPress={() => setSelectedCategory(category === 'All' ? null : category)}
+                key={category.id}
+                style={selectedCategory === category.id ? styles.tabActive : styles.tab}
+                onPress={() => setSelectedCategory(category.id === 'All' ? null : category.id)}
               >
-                <Text style={styles.tabText}>{category}</Text>
+                 <Text
+        style={[
+          styles.tabText,
+          selectedCategory === category.id ? styles.tabTextActive : null
+        ]}
+      >{category.name}</Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* FlatList for Products */}
           <FlatList
             data={filteredProducts}
             renderItem={renderProductItem}
             keyExtractor={(item) => item.id}
             numColumns={numColumns}
-            key={numColumns}
+            key={numColumns} // Forces re-render when numColumns changes
             initialNumToRender={numColumns * 2}
             contentContainerStyle={styles.productListContainer}
           />
-          {isMobile && (
-        <TouchableOpacity style={styles.drawerToggleButton} onPress={toggleDrawer}>
-          <Text style={styles.drawerToggleButtonText}>
-            {isDrawerOpen ? 'Hide Order Summary' : 'Show Order Summary'}
-          </Text>
-        </TouchableOpacity>
-      )}
-        </View>
-      </View>
 
+          {/* Drawer Toggle Button (Only for Mobile) */}
+          {isMobile && (
+            <TouchableOpacity style={styles.drawerToggleButton} onPress={toggleDrawer}>
+              <Text style={styles.drawerToggleButtonText}>
+                {isDrawerOpen ? 'Hide Order Summary' : 'Show Order Summary'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
+    ) : (
+      // Regular layout for mobile
+      <View style={styles.productListContainer}>
+    <View style={styles.tabsWrapper}>
+  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <View style={styles.tabsContainer}>
+      {categories.map((category) => (
+        <TouchableOpacity
+          key={category.id}
+          style={selectedCategory === category.id ? styles.tabActive : styles.tab}
+          onPress={() => setSelectedCategory(category.id === 'All' ? null : category.id)}
+        >
+           <Text
+        style={[
+          styles.tabText,
+          selectedCategory === category.id ? styles.tabTextActive : null
+        ]}
+      >{category.name}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </ScrollView>
+  
+  {/* Add scroll indicator icon */}
+  {categories.length > 4 && (
+    <View style={styles.scrollHintIcon}>
+      <Ionicons name="chevron-forward-outline" size={24} color="#9969c7" />
+    </View>
+  )}
+</View>
+
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProductItem}
+          keyExtractor={(item) => item.id}
+          numColumns={numColumns}
+          key={numColumns}
+          initialNumToRender={numColumns * 2}
+          contentContainerStyle={styles.productListContainer}
+        />
+
+        {isMobile && (
+          <TouchableOpacity style={styles.drawerToggleButton} onPress={toggleDrawer}>
+            <Text style={styles.drawerToggleButtonText}>
+              {isDrawerOpen ? 'Hide Order Summary' : 'Show Order Summary'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    )}
+  </View>
+ 
       {/* Show animated drawer if in mobile view */}
       {isMobile && (
         <Animated.View
@@ -193,7 +288,7 @@ const PosOrders = () => {
             <Text style={styles.orderSummaryTitle}>Order Summary</Text>
             {orderItems.map((item, index) => (
               <View key={index} style={styles.orderItem}>
-                <Text>{item.name}</Text>
+                <Text>{item.nameDisplay}</Text>
                 <Text>${item.price}</Text>
                 <TouchableOpacity onPress={() => removeItemFromOrder(item.id)}>
                   <Text style={styles.removeItemText}>Remove</Text>
@@ -219,7 +314,7 @@ const PosOrders = () => {
             <Text style={styles.orderSummaryTitle}>Order Summary</Text>
             {orderItems.map((item, index) => (
               <View key={index} style={styles.orderItem}>
-                <Text>{item.name}</Text>
+                <Text>{item.nameDisplay}</Text>
                 <Text>${item.price}</Text>
                 <TouchableOpacity onPress={() => removeItemFromOrder(item.id)}>
                   <Text style={styles.removeItemText}>Remove</Text>
@@ -254,10 +349,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   layout2: {
-    width: '30%',
+    width: '30%', 
+    height: '100%',
     padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -273,36 +368,45 @@ const styles = StyleSheet.create({
     padding: 10,
     borderBottomWidth: 3,
     borderBottomColor: '#9969c7',
+    borderRadius: 10,
   },
   tabText: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#000', // Default color for non-active tabs
+  },
+  tabTextActive: {
+    color: '#9969c7', // Color for active tab text
   },
   card: {
     backgroundColor: '#f9f9f9',
-    padding: 10,
+    padding: 8,
     borderRadius: 10,
-    marginVertical: 15,
-    marginHorizontal: 10,
+    marginVertical: 12,
+    marginHorizontal: 6,
     shadowColor: '#000',
     shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 2, height: 3 },
     elevation: 3,
     alignItems: 'center',
+    width: 120,
+    height: 170,
   },
   cardImage: {
-    width: '100%',
-    height: 100,
-    borderRadius: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 5,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
     marginTop: 10,
+    textAlign: 'center',
   },
   cardPrice: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
+    fontWeight: 'bold',
     marginTop: 5,
   },
   addButton: {
@@ -320,7 +424,10 @@ const styles = StyleSheet.create({
  
   },
   orderSummaryContainer: {
-    padding: 10,
+    paddingLeft: 40,
+    paddingRight: 40,
+    paddingTop: 20,
+    height: '100%',
     backgroundColor: '#fff',
     borderRadius: 10,
     shadowColor: '#000',
@@ -362,6 +469,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 10,
   },
+  tabsWrapper: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
   layoutMobile: {
     flex: 1,
     padding: 10,
@@ -387,6 +498,16 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 10,
   },
-});
+  scrollViewContent: {
+    flexGrow: 1, // Ensures the ScrollView content can grow for scrolling
+    paddingBottom: 20, // Extra padding for smooth scrolling
+  },
+  scrollHintIcon: {
+    
+    justifyContent: 'center',
+    right: -10,
+    bottom: 5,
+  },
+ });
 
 export default PosOrders;

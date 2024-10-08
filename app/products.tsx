@@ -157,6 +157,7 @@ const Products = () => {
 
   const handleEditProduct = (product: any) => {
     setProductName(product.name);
+    setNameDisplay(product.nameDisplay);
     setProductPrice(product.price);
     setProductDescription(product.description);
     setCategoryId(product.categoryId);
@@ -404,7 +405,7 @@ const Products = () => {
   };
   
   const handleAddOrUpdateProduct = async () => {
-    if (!productName || !productPrice || !nameDisplay || !categoryId || !quantity || !unit || !productSize) {
+    if (!productName || !productPrice || !nameDisplay || !categoryId) {
       alert('Please fill all product details before submitting.');
       return;
     }
@@ -428,7 +429,7 @@ const Products = () => {
       costPrice,
       quantity,
       unit,
-      productBarcode,
+      productBarcode : productBarcode || '',
       productSize,
       status,
       imageUrl: finalImageUrl, // Use the existing or new image URL
