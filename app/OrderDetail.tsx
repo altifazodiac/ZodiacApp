@@ -11,11 +11,7 @@ import {
   LayoutAnimation,
   RefreshControl,
   Platform,
-  Image,
   Alert,
-  PermissionsAndroid,
-  Easing,
-  UIManager,
   ActivityIndicator,
   AccessibilityInfo,
   useWindowDimensions,
@@ -24,20 +20,14 @@ import { ref, onValue, remove, update, push, set } from 'firebase/database';
 import { database } from './firebase';  
 import styled from 'styled-components/native';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
-import { MenuProvider } from 'react-native-popup-menu'; 
 
-type Category = {
+type OrderDetail = {
   id: string;
   name: string;
+  price: number;
   status: boolean;
+  options: { name: string; price: number }[];
 };
-
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
 
 // Styled components for UI
 const SearchBarContainer = styled.View`
@@ -68,9 +58,11 @@ const AddButton = styled.TouchableOpacity`
   border-radius: 5px;
 `;
 
-const CategoryScreen = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
+const OrderDetailComponent = () => {
+  const [OrderDetail, setOrderDetail] = useState<OrderDetail[]>([]);
   const [name, setName] = useState('');
+  const [price, setPrice] = useState<number | string>(''); // Handle number or empty string
+  const [options, setOptions] = useState<{ name: string; price: number }[]>([]);
   const [status, setStatus] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -80,25 +72,22 @@ const CategoryScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [scaleValue] = useState(new Animated.Value(0));
-  const [opacityValue] = useState(new Animated.Value(0));
-  const dimensions = useWindowDimensions(); // To handle responsive changes for accessibility
+  const dimensions = useWindowDimensions(); // To handle responsive changes
 
   useEffect(() => {
-    const categoryRef = ref(database, 'categories');
-    const unsubscribe = onValue(categoryRef, (snapshot) => {
-      const categoriesData = snapshot.val();
-      const categoryList: Category[] = categoriesData
-        ? Object.keys(categoriesData).map((key) => ({
+    const OrderDetailRef = ref(database, 'OrderDetail');
+    const unsubscribe = onValue(OrderDetailRef, (snapshot) => {
+      const OrderDetailData = snapshot.val();
+      const OrderDetailList: OrderDetail[] = OrderDetailData
+        ? Object.keys(OrderDetailData).map((key) => ({
             id: key,
-            ...categoriesData[key],
+            ...OrderDetailData[key],
           }))
         : [];
       
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       triggerCardAnimation();
-      setCategories(categoryList);
+      setOrderDetail(OrderDetailList);
       setLoading(false);
       setRefreshing(false);
     });
@@ -119,32 +108,61 @@ const CategoryScreen = () => {
     setSearchQuery(text);
   };
 
-  const filteredCategories = useMemo(() => {
+  const filteredOrderDetail = useMemo(() => {
     return searchQuery.trim() === ''
-      ? categories
-      : categories.filter(category =>
-          category.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ? OrderDetail
+      : OrderDetail.filter(OrderDetail =>
+          OrderDetail.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
-  }, [categories, searchQuery]);
+  }, [OrderDetail, searchQuery]);
 
   const handleCreate = () => {
-    const categoryRef = ref(database, 'categories');
-    if (isEditing && editId) {
-      const updateRef = ref(database, `categories/${editId}`);
-      update(updateRef, { name, status });
-    } else {
-      const newCategory = push(categoryRef);
-      set(newCategory, { name, status });
+    const OrderDetailRef = ref(database, 'OrderDetail');
+    const orderPrice = typeof price === 'string' ? parseFloat(price) : price;
+  
+    if (isNaN(orderPrice)) {
+      Alert.alert('Error', 'Please enter a valid price.');
+      return;
     }
+  
+    const orderData = { name, price: orderPrice, status, options: options.length ? options : [] };
+  
+    if (isEditing && editId) {
+      const updateRef = ref(database, `OrderDetail/${editId}`);
+      update(updateRef, orderData)
+        .then(() => {
+          resetForm();
+        })
+        .catch((error) => {
+          console.error('Error updating order:', error);
+          Alert.alert('Error', 'Failed to update order.');
+        });
+    } else {
+      const newOrderDetail = push(OrderDetailRef);
+      set(newOrderDetail, orderData)
+        .then(() => {
+          resetForm();
+        })
+        .catch((error) => {
+          console.error('Error creating order:', error);
+          Alert.alert('Error', 'Failed to create order.');
+        });
+    }
+  
+  
     setName('');
+    setPrice(0);
     setStatus(false);
+    setOptions([]);
     closeDrawer();
     setIsEditing(false);
   };
 
-  const handleEdit = (item: Category) => {
+  const handleEdit = (item: OrderDetail) => {
     setName(item.name);
+    setPrice(item.price.toString()); // Convert number to string for input
     setStatus(item.status);
+    setOptions(item.options);
     setEditId(item.id);
     setIsEditing(true);
     openDrawer();
@@ -162,6 +180,12 @@ const CategoryScreen = () => {
   };
 
   const closeDrawer = () => {
+    setName('');
+    setPrice(0);
+    setOptions([]);
+    setStatus(false);
+    setIsEditing(false);
+    setEditId(null);
     Animated.timing(drawerAnim, {
       toValue: 0,
       duration: 300,
@@ -178,40 +202,40 @@ const CategoryScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchCategories();
+    fetchOrderDetail();
   };
 
-  const fetchCategories = () => {
-    const categoryRef = ref(database, 'categories');
-    onValue(categoryRef, (snapshot) => {
-      const categoriesData = snapshot.val();
-      const categoryList: Category[] = categoriesData
-        ? Object.keys(categoriesData).map((key) => ({
+  const fetchOrderDetail = () => {
+    const OrderDetailRef = ref(database, 'OrderDetail');
+    onValue(OrderDetailRef, (snapshot) => {
+      const OrderDetailData = snapshot.val();
+      const OrderDetailList: OrderDetail[] = OrderDetailData
+        ? Object.keys(OrderDetailData).map((key) => ({
             id: key,
-            ...categoriesData[key],
+            ...OrderDetailData[key],
           }))
         : [];
 
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       triggerCardAnimation();
-      setCategories(categoryList);
+      setOrderDetail(OrderDetailList);
       setRefreshing(false);
     });
   };
+
   const handleDelete = (id: string) => {
     Alert.alert(
       "Confirm Delete",
-      "Are you sure you want to delete this category?",
+      "Are you sure you want to delete this OrderDetail?",
       [
         {
           text: "Cancel",
-          onPress: () => console.log("Delete canceled"),
           style: "cancel"
         },
         {
           text: "Delete",
           onPress: () => {
-            const deleteRef = ref(database, `categories/${id}`);
+            const deleteRef = ref(database, `OrderDetail/${id}`);
             remove(deleteRef);
           },
           style: "destructive"
@@ -224,58 +248,47 @@ const CategoryScreen = () => {
   return (
     <View style={{ flex: 1, padding: 20 }}>
       <SearchBarContainer>
-        <SearchInput style ={[{fontFamily:'GoogleSans,Kanit-Regular'}]}
+        <SearchInput
           value={searchQuery}
           onChangeText={handleSearchChange}
-          placeholder="Search categories"
-          accessibilityLabel="Search categories" 
+          placeholder="Search OrderDetail"
         />
         {searchQuery !== '' && (
-          <ClearButton onPress={resetSearch} accessibilityRole="button" accessibilityLabel="Clear search input">
+          <ClearButton onPress={resetSearch}>
             <Ionicons name="close-circle" size={20} color="gray" />
           </ClearButton>
         )}
-       <AddButton
-  onPress={openDrawer}
-  style={{
-    marginLeft: 10,
-    height: 40,
-    width: 40,
-    justifyContent: 'center',  // Center horizontally
-    alignItems: 'center',      // Center vertically
-    display: 'flex',           // Make it a flex container
-  }}
->
-  <AntDesign name="edit" size={20} color="#fff" />
-</AddButton>
+        <AddButton onPress={openDrawer}>
+          <AntDesign name="edit" size={20} color="#fff" />
+        </AddButton>
       </SearchBarContainer>
       {loading ? (
         <ActivityIndicator size="large" color="#9969c7" />
       ) : (
         <FlatList
-          data={filteredCategories}
+          data={filteredOrderDetail}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={styles.categoryItem}>
-              <Text style ={[{fontFamily:'GoogleSans,Kanit-Regular'}]}>{item.name}</Text>
-              <Switch  
-                value={item.status} 
-                onValueChange={(value) => update(ref(database, `categories/${item.id}`), { status: value })}
+            <View style={styles.OrderDetailItem}>
+              <Text>{item.name}</Text>
+              <Text>{item.price}</Text>
+              <Switch
+                value={item.status}
+                onValueChange={(value) => update(ref(database, `OrderDetail/${item.id}`), { status: value })}
               />
               <View style={styles.buttonGroup}>
-              <TouchableOpacity onPress={() => handleEdit(item)} >
-                <AntDesign name="edit" size={24} color="#9969c7" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.buttonMargin}>
-  <AntDesign name="delete" size={24} color="#9969c7" />
-</TouchableOpacity>
-            </View>
+                <TouchableOpacity onPress={() => handleEdit(item)}>
+                  <AntDesign name="edit" size={24} color="#9969c7" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <AntDesign name="delete" size={24} color="#9969c7" />
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         />
       )}
-      {/* Drawer implementation */}
       {drawerVisible && (
         <Animated.View
           style={[
@@ -295,9 +308,17 @@ const CategoryScreen = () => {
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder={isEditing ? 'Edit Category Name' : 'Create Category Name'}
+            placeholder={isEditing ? 'Edit OrderDetail Name' : 'Create OrderDetail Name'}
             style={styles.input}
           />
+          <TextInput
+            value={price.toString()} // Ensuring price is a string
+            onChangeText={(text) => setPrice(parseFloat(text) || 0)} // Parsing to number
+            placeholder={isEditing ? 'Edit OrderDetail Price' : 'Create OrderDetail Price'}
+            keyboardType="numeric"
+            style={styles.input}
+          />
+          
           <View style={styles.switchContainer}>
             <Switch
               value={status}
@@ -314,7 +335,6 @@ const CategoryScreen = () => {
               <Text style={styles.buttonText}>Close</Text>
             </TouchableOpacity>
           </View>
-           
         </Animated.View>
       )}
     </View>
@@ -322,7 +342,7 @@ const CategoryScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  categoryItem: {
+  OrderDetailItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -345,10 +365,7 @@ const styles = StyleSheet.create({
     top: 0,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
@@ -396,11 +413,13 @@ const styles = StyleSheet.create({
   buttonGroup: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-   
-  },
-  buttonMargin: {
-    marginLeft: 15,
   },
 });
 
-export default CategoryScreen;
+export default OrderDetailComponent;
+function resetForm() {
+  setName('');
+  setPrice(0);
+  setStatus(false);
+}
+

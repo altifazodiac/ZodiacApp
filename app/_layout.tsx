@@ -5,13 +5,16 @@ import * as SplashScreen from 'expo-splash-screen';
 import DrawerLayout from './DrawerLayout';  
 import { useColorScheme } from '../hooks/useColorScheme';  
 
+
  
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();  
   const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    GoogleSans: require('../assets/fonts/GoogleSans-Regular.ttf'),
+    'Kanit-Regular': require('../assets/fonts/Kanit-Regular.ttf'),
+    'Kanit-Bold': require('../assets/fonts/Kanit-Bold.ttf'),
   });
 
   useEffect(() => {

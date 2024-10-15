@@ -850,11 +850,11 @@ const Products = () => {
       
     <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
       <Icon name="filter" size={20} color="#fff" />
-      <Text style={styles.drawerToggleText}>Show Filters</Text>
+      <Text style={[styles.drawerToggleText,{fontFamily:'GoogleSans,Kanit-Regular'}]}>Show Filters</Text>
     </TouchableOpacity>
     <TouchableOpacity onPress={toggleFormDrawer} style={styles.drawerToggleButton}>
       <Icon name="plus" size={20} color="#fff" />
-      <Text style={styles.drawerToggleText}>Add New Item</Text>
+      <Text style={[styles.drawerToggleText,,{fontFamily:'GoogleSans,Kanit-Regular'}]}>Add New Item</Text>
     </TouchableOpacity>
 </View>
     <Modal visible={formDrawerVisible} transparent={true} animationType="none">
@@ -951,16 +951,16 @@ const ProductItem = ({
         <Text>No Image</Text>
       )}
       <View>
-        <Text>{item.nameDisplay}</Text>
-        <Text>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
+        <Text style={[{fontFamily:'Kanit-Regular'}]}>{item.nameDisplay}</Text>
+        <Text style={[{fontFamily:'GoogleSans'}]}>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
       </View>
       <View>
-        <Text>Size: {item.productSize}</Text>
-        <Text>Unit: {item.unit}</Text> 
+        <Text style={[{fontFamily:'GoogleSans'}]}>Size: {item.productSize}</Text>
+        <Text style={[{fontFamily:'GoogleSans'}]}>Unit: {item.unit}</Text> 
       </View>
       <View>
-        <Text>Price: {item.price}</Text>
-        <Text style={{ color: item.status ? 'green' : 'red' }}>
+        <Text style={[{fontFamily:'GoogleSans'}]}>Price: {item.price}</Text>
+        <Text style={[{ color: item.status ? 'green' : 'red' }, {fontFamily:'GoogleSans'}]}>
           {item.status ? 'Active' : 'Inactive'}
         </Text>
       </View>

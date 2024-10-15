@@ -8,6 +8,7 @@ import Login from './login';
 import Products from './products';  
 import CategoryScreen from './CategoryScreen ';
 import PosOrders from './PosOrders';
+import OrderDetail from './OrderDetail';
 
 const Drawer = createDrawerNavigator();
 
@@ -15,7 +16,7 @@ const DrawerLayout = () => {
   const colorScheme = useColorScheme();  
 
   return (
-    <Drawer.Navigator
+    <Drawer.Navigator  
       screenOptions={({ navigation }) => ({
         drawerActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: true,
@@ -70,7 +71,16 @@ const DrawerLayout = () => {
         }}
         component={Products}  
       />
-      
+      <Drawer.Screen
+        name="OrderDetail"
+        options={{
+          title: 'OrderDetail',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={OrderDetail}  
+      />
     </Drawer.Navigator>
   );
 };
