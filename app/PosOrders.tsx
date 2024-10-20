@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -12,41 +12,48 @@ import {
   Easing,
   ScrollView,
   Platform,
-  ActivityIndicator,
   Vibration,
   Modal,
+  ScrollView as RNScrollView,
 } from "react-native";
-import { db, ref, onValue, database } from "./firebase";
+
+import { db, ref, onValue } from "./firebase";
 import { Ionicons } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
+ 
 
 const windowWidth = Dimensions.get("window").width;
-const isMobile = windowWidth <= 768; // Adjust this breakpoint based on your needs
+const isMobile = windowWidth <= 768;
+
  
-type Product = {
+interface Option {
+  id: string;
+  name: string;
+  price: number;
+}
+
+interface Product {
   id: string;
   nameDisplay: string;
   price: string;
-  imageUrl: string | null;
+  imageUrl?: string | null;
+  description?: string;
   categoryId: string;
   status: string;
-  description: string;
-  itemQuantity?: number;
-  
-};
+  options?: Option[];
+}
+
+interface OrderItem {
+  product: Product;
+  quantity: number;
+  selectedOptions: Option[];
+}
 
 type Category = {
   id: string;
   name: string;
 };
 
-interface ProductData {
-  nameDisplay: string;
-  price: string;
-  imageUrl: string | null;
-  categoryId: string;
-  status: string;
-  description: string;
-}
  
 
 const PosOrders = () => {
@@ -57,39 +64,44 @@ const PosOrders = () => {
     return 4;
   }, []);
 
-
-  const [optionModalVisible, setOptionModalVisible] = useState(false); // State for OptionModal
-  const [orderDetailModalVisible, setOrderDetailModalVisible] = useState(false); // State for OrderDetailModal
+  const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: Option[] }>({});
+  const [sampleOptions, setSampleOptions] = useState<Option[]>([]);
+  const [products, setProducts] = useState<Product[]>([]); 
+  const [currentProduct, setCurrentProduct] = useState<Product | null>(null); 
+  const [orderDetailModalVisible, setOrderDetailModalVisible] = useState(false);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [numColumns, setNumColumns] = useState(calculateNumColumns());
-  const [description, setDescription] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [orderItems, setOrderItems] = useState<
-  { product: Product; quantity: number; selectedOptions: { name: string; price: number }[] }[]
-  >([]);  
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [windowWidth, setWindowWidth] = useState(
-    Dimensions.get("window").width
-  );
-  const [status, setStatus] = useState<boolean>(false);
+  const [windowWidth, setWindowWidth] = useState(Dimensions.get("window").width);
   const drawerHeight = useRef(new Animated.Value(0)).current;
   const drawerOpacity = useRef(new Animated.Value(0)).current;
   const screenHeight = Dimensions.get("window").height;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const pan = useRef(new Animated.ValueXY()).current;
-  const [quantity, setQuantity] = useState(0);
- const modalOpacity = useRef(new Animated.Value(0)).current;
-  const modalAnimation = useRef(new Animated.Value(-20)).current;
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null); 
- 
-  const { height } = Dimensions.get('window');
- 
+
+  const isValidOption = (option: any): option is Option => {
+    return (
+      typeof option === 'object' &&
+      typeof option.name === 'string' &&
+      typeof option.price === 'number' &&
+      typeof option.id === 'string'
+    );
+  };
+
+  const validateOptions = (options: any): Option[] => {
+    if (Array.isArray(options)) {
+      return options.filter(isValidOption);
+    }
+    return [];
+  };
+
   useEffect(() => {
     const categoriesRef = ref(db, "categories");
     const productsRef = ref(db, "products");
-    
+    const optionsRef = ref(db, "options"); // Define optionsRef here
+
     const categoriesListener = onValue(categoriesRef, (snapshot) => {
       const categoriesData = snapshot.val();
       const formattedCategories = categoriesData
@@ -103,46 +115,48 @@ const PosOrders = () => {
 
     const productsListener = onValue(productsRef, (snapshot) => {
       const productsData = snapshot.val();
-      const formattedProducts = productsData
+      const formattedProducts: Product[] = productsData
         ? Object.entries(productsData).map(([id, product]) => {
-            const productData = product as ProductData;
+            const productData = product as Product; // Cast to Product type
             return {
               id,
               nameDisplay: productData.nameDisplay,
               price: productData.price,
-              imageUrl: productData.imageUrl,
+              imageUrl: productData.imageUrl || undefined,
               categoryId: productData.categoryId,
               status: productData.status,
               description: productData.description,
+              options: validateOptions(productData.options), // Validate options here
             };
           })
         : [];
       setProducts(formattedProducts);
+      setIsLoading(false);
+    });
+    
+    const optionsListener = onValue(optionsRef, (snapshot) => {
+      const optionsData = snapshot.val();
+      const formattedOptions: Option[] = optionsData
+        ? Object.entries(optionsData).map(([id, option]) => {
+            const optionData = option as Option; // Cast to Option type
+            return {
+              id,
+              name: optionData.name,
+              price: optionData.price,
+            };
+          })
+        : [];
+      setSampleOptions(formattedOptions);
     });
 
-    
     return () => {
       categoriesListener();
       productsListener();
-     
+      optionsListener();
     };
   }, []);
 
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(Dimensions.get("window").width);
-      setNumColumns(calculateNumColumns());
-    };
-
-    const subscription = Dimensions.addEventListener("change", handleResize);
-    return () => {
-      subscription.remove();
-    };
-  }, [calculateNumColumns]);
-
-  const isMobile = windowWidth <= 768;
-
-  const filteredProducts =
+    const filteredProducts =
     selectedCategory && selectedCategory !== "All"
       ? products.filter(
           (product) =>
@@ -151,38 +165,56 @@ const PosOrders = () => {
         )
       : products.filter((product) => Boolean(product.status) === true);
 
-      const addItemToOrder = (product: Product, selectedOptions: { name: string; price: number }[] = []) => {
-        setOrderItems((prevOrderItems) => {
-          const existingItem = prevOrderItems.find((item) => item.product.id === product.id);
-          if (existingItem) {
-            return prevOrderItems.map((item) =>
-              item.product.id === product.id
-                ? { 
-                    ...item, 
-                    quantity: item.quantity + 1, 
-                    selectedOptions: [...item.selectedOptions, ...selectedOptions] 
-                  }
-                : item
-            );
-          } else {
-            return [...prevOrderItems, { product, quantity: 1, selectedOptions }];
-          }
-        });
-      };
-  const removeItemFromOrder = (id: string) => {
-    setOrderItems(orderItems.filter((item) => item.product.id !== id));
+      
+    
+  const mergeOptions = (existingOptions: Option[], newOptions: Option[]): Option[] => {
+    const combinedOptions = [...existingOptions];
+    newOptions.forEach((newOption) => {
+      const existingOptionIndex = combinedOptions.findIndex((option) => option.id === newOption.id);
+      if (existingOptionIndex !== -1) {
+        combinedOptions[existingOptionIndex] = {
+          ...combinedOptions[existingOptionIndex],
+          ...newOption,
+        };
+      } else {
+        combinedOptions.push(newOption);
+      }
+    });
+    return combinedOptions;
   };
+
+  const addItemToOrder = (product: Product, selectedOptions: Option[] = []) => {
+    setOrderItems((prevOrderItems) => {
+      const existingItemIndex = prevOrderItems.findIndex((item) => item.product.id === product.id);
+
+      if (existingItemIndex !== -1) {
+        const updatedOrderItems = [...prevOrderItems];
+        const existingItem = updatedOrderItems[existingItemIndex];
+
+        updatedOrderItems[existingItemIndex] = {
+          ...existingItem,
+          quantity: existingItem.quantity + 1,
+          selectedOptions: mergeOptions(existingItem.selectedOptions, selectedOptions),
+        };
+        return updatedOrderItems;
+      } else {
+        return [...prevOrderItems, { product, quantity: 1, selectedOptions }];
+      }
+    });
+  };
+
+  const removeItemFromOrder = (id: string) => {
+    setOrderItems((prevOrderItems) => prevOrderItems.filter((item) => item.product.id !== id));
+  };
+
   const renderProductItem = ({ item }: { item: Product }) => {
-    const orderItem = orderItems.find(
-      (orderItem) => orderItem.product.id === item.id
-    );
+    const orderItem = orderItems.find((orderItem) => orderItem.product.id === item.id);
     const itemQuantity = orderItem ? orderItem.quantity : 0;
-
+  
     const handleIncreaseQuantity = () => addItemToOrder(item);
-
+  
     const handleDecreaseQuantity = () => {
       if (itemQuantity > 1) {
-        // Changed to 1 to trigger remove at 0
         setOrderItems((prevOrderItems) =>
           prevOrderItems.map((orderItem) =>
             orderItem.product.id === item.id
@@ -190,15 +222,10 @@ const PosOrders = () => {
               : orderItem
           )
         );
-      }
-      if (itemQuantity <= 1) {
-        // Changed to 1 to trigger remove at 0
-        removeItemFromOrder(item.id); // Directly use item.id
+      } else if (itemQuantity === 1) {
+        removeItemFromOrder(item.id);
       }
     };
-
-     
-
     return (
       <TouchableOpacity
         onPress={() => {
@@ -206,60 +233,37 @@ const PosOrders = () => {
           toggleDrawer();
           Vibration.vibrate();
         }}
-        onLongPress= {() => setOrderDetailModalVisible(true)} 
+        onLongPress={() => {
+          const existingSelectedOptions = orderItems.find((orderItem) => orderItem.product.id === item.id)?.selectedOptions || [];
+          
+          // Generate formattedOptions for the product
+          const formattedOptions: Option[] = existingSelectedOptions.map((option, index) => ({
+            id: `option-${item.id}-${index}`,
+            name: option.name,
+            price: option.price,
+          }));
+  
+        
+          setCurrentProduct(item);
+          setOrderDetailModalVisible(true);
+        }}
       >
         <View style={styles.card}>
           <View style={styles.cardImageContainer}>
-            <Image
-              source={{
-                uri: item.imageUrl || "https://via.placeholder.com/100",
-              }}
-              style={styles.cardImage}
-            />
+            <Image source={{ uri: item.imageUrl || "https://via.placeholder.com/100" }} style={styles.cardImage} />
             <View>
-              <Text style={[styles.cardTitle, { fontFamily: "Kanit-Regular" }]}>
-                {item.nameDisplay}
-              </Text>
-              <Text
-                style={[styles.cardDescription, { fontFamily: "GoogleSans" }]}
-              >
-                {item.description}
-              </Text>
+              <Text style={styles.cardTitle}>{item.nameDisplay}</Text>
+              <Text style={styles.cardDescription}>{item.description}</Text>
             </View>
           </View>
           <View style={styles.priceQuantityContainer}>
-            <Text style={[styles.cardPrice, { fontFamily: "GoogleSans" }]}>
-              {item.price}฿
-            </Text>
-            {!isMobile && (
-               <TouchableOpacity 
-               onPress= {() => setOrderDetailModalVisible(true)} 
-               style={styles.buttonDetail}
-             >
-               <Text style={[styles.buttonTextDetail, { fontFamily: "GoogleSans,Kanit-Regular", color: "Black" }]}>
-                 Add More
-               </Text>
-             </TouchableOpacity>
-            )}
-           
+            <Text style={styles.cardPrice}>{item.price}฿</Text>
             <View style={styles.quantityContainer}>
-              <TouchableOpacity
-                onPress={() => {
-                  handleDecreaseQuantity();
-                  Vibration.vibrate();
-                }}
-                style={styles.quantityButton}
-              >
+              <TouchableOpacity onPress={() => { handleDecreaseQuantity(); Vibration.vibrate(); }} style={styles.quantityButton}>
                 <Text style={styles.quantityButtonText}>-</Text>
               </TouchableOpacity>
               <Text style={styles.quantityText}>{itemQuantity}</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  handleIncreaseQuantity();
-                  Vibration.vibrate();
-                }}
-                style={styles.quantityButton}
-              >
+              <TouchableOpacity onPress={() => { handleIncreaseQuantity(); Vibration.vibrate(); }} style={styles.quantityButton}>
                 <Text style={styles.quantityButtonText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -268,7 +272,6 @@ const PosOrders = () => {
       </TouchableOpacity>
     );
   };
-
   const toggleDrawer = () => {
     if (isDrawerOpen) {
       Animated.parallel([
@@ -334,148 +337,123 @@ const PosOrders = () => {
   const discount = subtotal > 50 ? 5 : 0;
   const total = subtotal - discount;
 
-  
-  const OrderDetailModal = ({
-    visible,
-    onClose,
-    products, // Receive the products as a prop
-  }: {
+  const OptionItem: React.FC<{
+    option: Option;
+    isSelected: boolean;
+    onPress: () => void;
+  }> = ({ option, isSelected, onPress }) => (
+    <View style={styles.gridItem}>
+      <TouchableOpacity
+        style={[styles.buttonOption, isSelected ? styles.activeButton : styles.inactiveButton]}
+        onPress={onPress}
+        activeOpacity={1}
+      >
+        <Text style={isSelected ? styles.activeText : styles.inactiveText}>
+          {option.name} - {option.price}฿
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+  const OrderDetailsModal: React.FC<{
     visible: boolean;
     onClose: () => void;
-    products: Product[]; // Define the type of the products prop
-  }) => {
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-    const modalAnimation = useRef(new Animated.Value(screenHeight)).current;
-    const modalOpacity = useRef(new Animated.Value(0)).current;
-    const animatedValues = useRef<Animated.Value[]>([]);
-    const colorAnims = useRef<Animated.Value[]>([]);
-    const [isPressed, setIsPressed] = useState<number | null>(null);
-    const [activeButtons, setActiveButtons] = useState<string[]>([]);
-    const [optionModalVisible, setOptionModalVisible] = useState<boolean>(false);
+    currentProduct: Product | null;
+    selectedOptions: { [key: string]: Option[] };
+    setSelectedOptions: React.Dispatch<React.SetStateAction<{ [key: string]: Option[] }>>;
+    addItemToOrder: (product: Product, options: Option[]) => void;
+  }> = ({ visible, onClose, currentProduct, selectedOptions, setSelectedOptions, addItemToOrder }) => {
+    const scrollViewRef = useRef<ScrollView>(null);
   
-    const handlePress = (product: Product) => {
-      setSelectedProduct(product);
-      setOptionModalVisible(true);
+    // Sample options for testing
+    const sampleOptions: Option[] = [
+      { id: "opt1", name: "Extra Cheese", price: 10 },
+      { id: "opt2", name: "Spicy Sauce", price: 5 },
+      { id: "opt3", name: "Double Meat", price: 20 },
+    ];
+  
+    // Option selection handler
+    const handleOptionPress = (option: Option) => {
+      if (!currentProduct) return;
+  
+      setSelectedOptions((prevOptions) => {
+        const productOptions = prevOptions[currentProduct.id] || [];
+        const optionExists = productOptions.some((o) => o.name === option.name);
+  
+        const updatedOptions = optionExists
+          ? productOptions.filter((o) => o.name !== option.name)
+          : [...productOptions, option];
+  
+        return { ...prevOptions, [currentProduct.id]: updatedOptions };
+      });
     };
   
-    useEffect(() => {
-      if (visible) {
-        Animated.parallel([
-          Animated.timing(modalAnimation, {
-            toValue: 0,
-            duration: 400,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.ease),
-          }),
-          Animated.timing(modalOpacity, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-            easing: Easing.inOut(Easing.ease),
-          }),
-        ]).start();
-      } else {
-        Animated.sequence([
-          Animated.timing(modalOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(modalAnimation, {
-            toValue: screenHeight,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          onClose();
-        });
-      }
-    }, [visible]);
+    const scrollUp = () => scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    const scrollDown = () => scrollViewRef.current?.scrollToEnd({ animated: true });
   
     return (
       <Modal transparent={true} visible={visible} onRequestClose={onClose}>
         <View style={styles.centeredView}>
-          <Animated.View
-            style={[
-              styles.modalView,
-              {
-                opacity: modalOpacity,
-                transform: [{ translateY: modalAnimation }],
-              },
-            ]}
-          >
-            <Text style={styles.modalText}>Order Details</Text>
-            {products.map((product, index) => (
-              <TouchableOpacity
-                key={product.id}
-                style={[
-                  styles.button,
-                  { margin: 10 },
-                  activeButtons.includes(product.id)
-                    ? styles.activeButton
-                    : styles.inactiveButton,
-                ]}
-                onPressIn={() => {
-                  Animated.spring(animatedValues.current[index], {
-                    toValue: 0.95,
-                    useNativeDriver: true,
-                  }).start();
-                }}
-                onPressOut={() => {
-                  Animated.spring(animatedValues.current[index], {
-                    toValue: 1,
-                    useNativeDriver: true,
-                  }).start();
-                }}
-                onPress={() => {
-                  handlePress(product);
-                  setActiveButtons((prevActiveButtons) =>
-                    prevActiveButtons.includes(product.id)
-                      ? prevActiveButtons.filter((id) => id !== product.id)
-                      : [...prevActiveButtons, product.id]
-                  );
-                }}
-                activeOpacity={1}
-              >
-                <Animated.View
-                  style={{
-                    transform: [{ scale: animatedValues.current[index] }],
-                  }}
-                >
-                  <Text
-                    style={
-                      activeButtons.includes(product.id)
-                        ? styles.activeText
-                        : styles.inactiveText
-                    }
-                  >
-                    {product.nameDisplay}
-                  </Text>
-                  <Text>Price: {product.price}</Text>
-                  {product.itemQuantity && (
-                    <Text>Quantity: {product.itemQuantity}</Text>
-                  )}
-                </Animated.View>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>
+              Order Details for {currentProduct?.nameDisplay || "No Product Selected"}
+            </Text>
+            <View style={styles.container}>
+              <TouchableOpacity style={styles.arrowButton} onPress={scrollUp}>
+                <AntDesign name="up" size={24} color="black" />
               </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.textStyle}>Close</Text>
-            </TouchableOpacity>
-          </Animated.View>
+              <RNScrollView ref={scrollViewRef} style={styles.scrollView}>
+                {sampleOptions.map((option) => {
+                  const isSelected = (selectedOptions[currentProduct?.id || ''] || []).some(o => o.name === option.name);
+                  return (
+                    <OptionItem 
+                      key={option.id} 
+                      option={option} 
+                      isSelected={isSelected} 
+                      onPress={() => handleOptionPress(option)} 
+                    />
+                  );
+                })}
+              </RNScrollView>
+              <TouchableOpacity style={styles.arrowButton} onPress={scrollDown}>
+                <AntDesign name="down" size={24} color="black" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addButton} onPress={() => {
+                if (!currentProduct) return;
+                addItemToOrder(currentProduct, selectedOptions[currentProduct?.id || ''] || []);
+                onClose(); // Close the modal after adding to order
+              }}>
+                <Text style={styles.addButtonText}>Add to Order</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     );
   };
+ 
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
-   <OrderDetailModal
-  visible={orderDetailModalVisible}
-  onClose={() => setOrderDetailModalVisible(false)}
-  products={filteredProducts} // Pass filtered products to the modal
+     
+      {orderDetailModalVisible && (
+       <OrderDetailsModal 
+  visible={orderDetailModalVisible} 
+  onClose={() => setOrderDetailModalVisible(false)} 
+  currentProduct={currentProduct} 
+  selectedOptions={selectedOptions} 
+  setSelectedOptions={setSelectedOptions} 
+  addItemToOrder={addItemToOrder} 
+ 
 />
+      )}
       <View style={isMobile ? styles.layoutMobile : styles.layout1}>
         {Platform.OS === "web" ? (
-          <ScrollView contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.scrollViewContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.productListContainer}>
               <View style={styles.tabsContainer}>
                 {categories.map((category) => (
@@ -517,13 +495,18 @@ const PosOrders = () => {
                 initialNumToRender={numColumns * 2}
                 contentContainerStyle={styles.productListContainer}
               />
+
               </ScrollView>
             </View>
           </ScrollView>
         ) : (
           <View style={styles.productListContainer}>
             <View style={styles.tabsWrapper}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+              >
                 <View style={styles.tabsContainer}>
                   {categories.map((category) => (
                     <TouchableOpacity
@@ -575,6 +558,7 @@ const PosOrders = () => {
               initialNumToRender={numColumns * 2}
               contentContainerStyle={styles.productListContainer}
             />
+
             </ScrollView>
             {isMobile && (
               <Animated.View style={[styles.drawerToggleButton]}>
@@ -609,39 +593,55 @@ const PosOrders = () => {
               Order Summary
             </Text>
             {orderItems.map((item, index) => {
-  
-  const optionsText = item.selectedOptions.map(option => option.name).join(', ');
+              const optionsText = item.selectedOptions
+                .map((option) => option.name)
+                .join(", ");
+                
 
-  return (
-    <View key={index} style={styles.orderItem}>
-      <View style={styles.orderItemTextContainer}> 
-        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-          {item.product.nameDisplay} 
-        </Text>
-        {optionsText ? <Text style={styles.optionsText}>({optionsText})</Text> : null}
-      </View>
-      <View style={styles.orderItemQuantityContainer}>
-        <Text style={[{ fontFamily: "GoogleSans" }]}>
-          {item.quantity} x {parseFloat(item.product.price).toFixed(2)}฿ 
-        </Text>
-        {optionsText ? <Text style={styles.optionsPriceText}>
-          (+{item.selectedOptions.reduce((sum, option) => sum + option.price, 0).toFixed(2)}฿)
-        </Text> : null}
-      </View>
-      <Text style={styles.orderItemPrice}>
-        
-        {(
-          item.quantity * 
-          (parseFloat(item.product.price) + 
-          item.selectedOptions.reduce((sum, option) => sum + option.price, 0))
-        ).toFixed(2)}฿ 
-      </Text>
-      <TouchableOpacity onPress={() => removeItemFromOrder(item.product.id)}>
-        <Text style={styles.removeItemText}>Remove</Text>
-      </TouchableOpacity>
-    </View>
-  );
-})}
+              return (
+                <View key={index} style={styles.orderItem}>
+                  <View style={styles.orderItemTextContainer}>
+                    <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                      {item.product.nameDisplay}
+                    </Text>
+                    {optionsText ? (
+                      <Text style={styles.optionsText}>({optionsText})</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.orderItemQuantityContainer}>
+                    <Text style={[{ fontFamily: "GoogleSans" }]}>
+                      {item.quantity} x{" "}
+                      {parseFloat(item.product.price).toFixed(2)}฿
+                    </Text>
+                    {optionsText ? (
+                      <Text style={styles.optionsPriceText}>
+                        (+
+                        {item.selectedOptions
+                          .reduce((sum, option) => sum + option.price, 0)
+                          .toFixed(2)}
+                        ฿)
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.orderItemPrice}>
+                    {(
+                      item.quantity *
+                      (parseFloat(item.product.price) +
+                        item.selectedOptions.reduce(
+                          (sum, option) => sum + option.price,
+                          0
+                        ))
+                    ).toFixed(2)}
+                    ฿
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => removeItemFromOrder(item.product.id)}
+                  >
+                    <Text style={styles.removeItemText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
 
             <View style={styles.orderTotalContainer}>
               <View style={styles.orderTotalRow}>
@@ -693,6 +693,7 @@ const PosOrders = () => {
             >
               Order Summary
             </Text>
+
             {orderItems.map((item, index) => (
               <View key={index} style={styles.orderItem}>
                 <Text style={[{ fontFamily: "Kanit-Regular" }]}>
@@ -704,6 +705,21 @@ const PosOrders = () => {
                 <Text style={[{ fontFamily: "GoogleSans" }]}>
                   {(item.quantity * parseFloat(item.product.price)).toFixed(2)}฿
                 </Text>
+
+               
+                {item.selectedOptions.length > 0 && (
+                  <View style={styles.optionsContainer}>
+                    {item.selectedOptions.map((option, optionIndex) => (
+                      <Text
+                        key={optionIndex}
+                        style={[{ fontFamily: "GoogleSans-Italic" }]}
+                      >
+                        - {option.name}: {option.price.toFixed(2)}฿
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
                 <TouchableOpacity
                   onPress={() => removeItemFromOrder(item.product.id)}
                 >
@@ -756,50 +772,131 @@ const PosOrders = () => {
     </View>
   );
 };
-
+const { width } = Dimensions.get("window");
 const styles = StyleSheet.create({
-  container: {
+  container: isMobile
+    ? {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+      }
+    : {
+        flexDirection: "row",
+        width: "100%",
+        height: "100%",
+      },
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  orderItem: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     width: "100%",
-    height: "100%",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: "#ccc",
+  },
+  orderItemPrice: {
+    fontFamily: "GoogleSans",
+  },
+  removeItemText: {
+    color: "red",
+    fontFamily: "GoogleSans",
+  },
+  // New styles for the options container
+  optionsContainer: {
+    marginTop: 5,
+    paddingLeft: 20, // Indentation for the options
+  },
+  modalView: {
+    width: "90%",
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    elevation: 5,
+    height: "60%",
+  },
+  modalText: {
+    marginBottom: 15,
+    fontSize: 18,
+    fontWeight: "bold",
   },
   button: {
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 20,
     borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     width: 120,
-    
   },
+  buttonOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButton: {
+    backgroundColor: "#bbbbbb",
+    borderRadius: 20,
+    padding: 10,
+    elevation: 2,
+    marginTop: 15,
+    width: "auto",
+  },
+  arrowButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 20,
+    marginVertical: 5,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
+    padding: 10,
+  },
+  gridItem: {
+    width: isMobile ? width / 2 - 20 : width / 4 - 20,
+    marginBottom: 15,
+  },
+
   activeButton: {
-    borderColor: '#9969c7', // Blue border when active
-    backgroundColor: '#9969c7', // Blue background when active
+    borderColor: "#9969c7",
   },
   inactiveButton: {
-    borderColor: 'gray', // Gray border when inactive
+    borderColor: "gray",
   },
   activeText: {
-    color: '#fff', // Blue text when active
+    color: "#9969c7",
     fontSize: 16,
   },
   inactiveText: {
-    color: 'gray', // Gray text when inactive
+    color: "gray",
     fontSize: 16,
   },
   buttonDetail: {
-    alignItems: 'center',
-    backgroundColor: '#eeeeee',
+    alignItems: "center",
+    backgroundColor: "#eeeeee",
     height: 30,
     padding: 10,
-   borderRadius: 10,
-   marginTop: 2,
+    borderRadius: 10,
+    marginTop: 2,
   },
   buttonTextDetail: {
     bottom: 3,
     fontSize: 12,
- },
+  },
   layout1: {
     width: "64%",
     justifyContent: "center",
@@ -855,7 +952,6 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
-    
   },
   cardTitle: {
     fontSize: isMobile ? 14 : 16, // Smaller font size on mobile
@@ -928,7 +1024,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 20,
   },
-   
+  closeButtonText: {
+    color: "black",
+  },
   orderTotalContainer: {
     marginTop: 20,
   },
@@ -944,9 +1042,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  removeItemText: {
-    color: "#ff4444",
-  },
+
   containerMobile: {
     flex: 1,
     padding: 10,
@@ -998,74 +1094,62 @@ const styles = StyleSheet.create({
     bottom: 5,
   },
   orderTotalText: {},
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Transparent dark background
+
+  checkmark: {
+    color: "#fff",
+    fontSize: 18,
+    marginRight: 5,
   },
-  modalView: {
-     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 35,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+
+  optionModalView: {
+    width: "80%",
+    padding: 20,
+    backgroundColor: "white",
+    borderRadius: 10,
+    alignItems: "center",
   },
-  
-  closeButton: {
-    borderRadius: 20,
+  deselectButton: {
+    backgroundColor: "red",
     padding: 10,
-    elevation: 2,
-    backgroundColor: '#aaaaaa', 
-    marginTop: 20,
-    width: 100,
+    borderRadius: 5,
+    marginTop: 10,
   },
+
   textStyle: {
-    color: 'white',
-    fontWeight: 'bold',
-    textAlign: 'center',
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
   },
-  modalText: {
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  orderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center', 
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor:   
-   '#eee', 
-  },
+
   orderItemTextContainer: {
-    flex: 1, 
+    flex: 1,
+  },
+  flatList: {
+    paddingHorizontal: 10,
   },
   orderItemQuantityContainer: {
-    flexDirection: 'column', 
-    alignItems: 'flex-end', 
-    marginRight: 10, 
+    flexDirection: "column",
+    alignItems: "flex-end",
+    marginRight: 10,
   },
   optionsText: {
     fontSize: 12,
-    color: 'gray', 
+    color: "gray",
   },
   optionsPriceText: {
     fontSize: 10,
-    color: 'gray', 
+    color: "gray",
   },
-  orderItemPrice: {
-    fontFamily: "GoogleSans",
-    fontWeight: 'bold', 
-    marginLeft: 10, 
-  }
+  noOptionsText: {
+    fontSize: 16,
+    color: "gray",
+    textAlign: "center",
+    marginVertical: 10,
+  },
+  scrollView: {
+    maxHeight: 200,
+    width: '100%',
+  },
 });
 
 export default PosOrders;

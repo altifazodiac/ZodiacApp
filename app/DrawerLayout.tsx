@@ -7,7 +7,7 @@ import { useColorScheme } from '../hooks/useColorScheme';
 import Login from './login';  
 import Products from './products';  
 import CategoryScreen from './CategoryScreen ';
-import PosOrders from './PosOrders';
+import Orders from './Orders';
 import OrderDetail from './OrderDetail';
 
 const Drawer = createDrawerNavigator();
@@ -42,14 +42,14 @@ const DrawerLayout = () => {
         component={Login}  
       />
        <Drawer.Screen
-        name="PosOrders"
+        name="Orders"
         options={{
           title: 'Orders',
           drawerIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'menu' : 'menu-outline'} color={color} size={24} />
           ),
         }}
-        component={PosOrders}  
+        component={Orders}  
       />
        <Drawer.Screen
         name="CategoryScreen "
