@@ -8,6 +8,7 @@ import {
   Vibration,
   Animated,
   TouchableOpacity,
+  Dimensions,
 } from "react-native";
 import { Product } from "../Data/types";
 
@@ -17,6 +18,7 @@ interface Props {
   handleIncreaseQuantity: () => void;
   handleDecreaseQuantity: () => void;
   onLongPress: () => void;
+  toggleDrawer: () => void;
 }
 
 const ProductItem: React.FC<Props> = ({
@@ -24,14 +26,14 @@ const ProductItem: React.FC<Props> = ({
   itemQuantity,
   handleIncreaseQuantity,
   handleDecreaseQuantity,
+  toggleDrawer,
   onLongPress,
 }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current; // Initial opacity
-  const slideAnim = useRef(new Animated.Value(30)).current; // Initial position (30 units below)
-  const scaleAnim = useRef(new Animated.Value(1)).current; // Initial scale
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Fade-in and slide-up animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -46,7 +48,6 @@ const ProductItem: React.FC<Props> = ({
     ]).start();
   }, []);
 
-  // Function to handle press in (scaling animation)
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.95,
@@ -54,7 +55,6 @@ const ProductItem: React.FC<Props> = ({
     }).start();
   };
 
-  // Function to handle press out (scaling animation)
   const handlePressOut = () => {
     Animated.spring(scaleAnim, {
       toValue: 1,
@@ -66,6 +66,7 @@ const ProductItem: React.FC<Props> = ({
     <TouchableWithoutFeedback
       onPress={() => {
         handleIncreaseQuantity();
+        toggleDrawer();
         Vibration.vibrate();
       }}
       onLongPress={onLongPress}
@@ -122,40 +123,42 @@ const ProductItem: React.FC<Props> = ({
 
 export default ProductItem;
 
-const isMobile = false;
-const isTablet = true; // Adjust based on your logic for detecting tablet
+const windowWidth = Dimensions.get("window").width;
+const windowHeight = Dimensions.get("window").height;
+const isMobile = windowWidth <= 768;
+const isTablet = windowWidth > 768 && windowWidth <= 1024;
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
     borderRadius: 10,
-    padding: isMobile ? 10 : isTablet ? 12 : 15,
-    margin: isMobile ? 5 : isTablet ? 8 : 10,
+    padding: isMobile ? 8 : isTablet ? 8 : 10,
+    margin: isMobile ? 7 : isTablet ? 6 : 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.23,
     shadowRadius: 2.62,
-    width: isMobile ? 180 : isTablet ? 220 : 250,
+    width: isMobile ? 180 : isTablet ? 205 : 240,
   },
   cardImageContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
   },
   cardImage: {
-    width: isMobile ? 50 : isTablet ? 55 : 60,
-    height: isMobile ? 50 : isTablet ? 55 : 60,
+    width: isMobile ? 45 : isTablet ? 55 : 60,
+    height: isMobile ? 45 : isTablet ? 55 : 60,
     resizeMode: "cover",
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
   cardTitle: {
     fontFamily: "Kanit, GoogleSans",
-    fontSize: isMobile ? 14 : isTablet ? 15 : 16,
+    fontSize: isMobile ? 12 : isTablet ? 15 : 16,
     fontWeight: "medium",
-    marginTop: isMobile ? 5 : isTablet ? 8 : 10,
+    marginTop: isMobile ? 4 : isTablet ? 8 : 10,
   },
   cardDescription: {
     fontFamily: "GoogleSans",
-    fontSize: isMobile ? 12 : isTablet ? 13 : 14,
+    fontSize: isMobile ? 11 : isTablet ? 13 : 14,
     color: "#666",
     marginTop: isMobile ? 3 : isTablet ? 4 : 5,
   },
@@ -163,11 +166,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: isMobile ? 5 : isTablet ? 8 : 10,
+    marginTop: isMobile ? 4 : isTablet ? 8 : 10,
   },
   cardPrice: {
     fontFamily: "GoogleSans",
-    fontSize: isMobile ? 16 : isTablet ? 17 : 18,
+    fontSize: isMobile ? 14 : isTablet ? 17 : 18,
     fontWeight: "bold",
     marginLeft: "15%",
   },
@@ -179,16 +182,16 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   quantityButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: isMobile ? 8 : 10,
+    paddingVertical: isMobile ? 4 : 5,
   },
   quantityButtonText: {
     fontFamily: "GoogleSans",
-    fontSize: 16,
+    fontSize: isMobile ? 14 : 16,
   },
   quantityText: {
     fontFamily: "GoogleSans",
-    fontSize: 16,
-    marginHorizontal: 10,
+    fontSize: isMobile ? 14 : 16,
+    marginHorizontal: isMobile ? 8 : 10,
   },
 });

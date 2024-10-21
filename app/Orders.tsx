@@ -18,25 +18,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
-import {  } from "react-native-gesture-handler"; 
-import { Swipeable } from 'react-native-gesture-handler';
- 
+import {} from "react-native-gesture-handler";
+import { Swipeable } from "react-native-gesture-handler";
+import { transform } from "lodash";
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
 const isMobile = windowWidth <= 768;
 const isTablet = windowWidth > 768 && windowWidth <= 1024;
 
-
 const Orders = () => {
   const calculateNumColumns = useCallback(() => {
     const screenWidth = Dimensions.get("window").width;
-    if (screenWidth < 500) return 2;
-    if (screenWidth < 900) return 3;
-    return 4;
+  
+    // Handle ranges more clearly
+    if (screenWidth < 500) return 2; // Small screens
+    if (screenWidth >= 768 && screenWidth <= 1024) return 3; // Tablets or medium screens
+    return 4; // Larger screens
   }, []);
 
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<{
     [key: string]: Option[];
   }>({});
@@ -48,14 +48,28 @@ const Orders = () => {
   const [numColumns, setNumColumns] = useState(calculateNumColumns());
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   const [windowWidth, setWindowWidth] = useState(
     Dimensions.get("window").width
   );
   const drawerHeight = useRef(new Animated.Value(0)).current;
   const drawerOpacity = useRef(new Animated.Value(0)).current;
   const pan = useRef(new Animated.ValueXY()).current;
-
+  const animateOrderItem = () => {
+    // Animates scaling of the item
+    Animated.sequence([
+      Animated.timing(animation, {
+        toValue: 1.1, // Scale up
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(animation, {
+        toValue: 1, // Scale back to normal
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
   const isValidOption = (option: any): option is Option => {
     return (
       typeof option === "object" &&
@@ -71,7 +85,18 @@ const Orders = () => {
     }
     return [];
   };
+  useEffect(() => {
+    const handleDimensionsChange = () => {
+      setNumColumns(calculateNumColumns());
+    };
 
+    const subscription = Dimensions.addEventListener("change", handleDimensionsChange);
+
+    // Cleanup listener on unmount
+    return () => {
+      subscription?.remove();
+    };
+  }, [calculateNumColumns]);
   useEffect(() => {
     const categoriesRef = ref(db, "categories");
     const productsRef = ref(db, "products");
@@ -137,6 +162,7 @@ const Orders = () => {
     });
     return mergedOptions;
   };
+  const animation = useRef(new Animated.Value(1)).current; // Initialize useRef in component body
   const addItemToOrder = (product: Product, selectedOptions: Option[] = []) => {
     setOrderItems((prevOrderItems) => {
       const existingItemIndex = prevOrderItems.findIndex(
@@ -155,8 +181,10 @@ const Orders = () => {
             selectedOptions
           ),
         };
+        animateOrderItem(); // Trigger animation on update
         return updatedOrderItems;
       } else {
+        animateOrderItem(); // Trigger animation on new addition
         return [...prevOrderItems, { product, quantity: 1, selectedOptions }];
       }
     });
@@ -167,42 +195,34 @@ const Orders = () => {
       prevOrderItems.filter((item) => item.product.id !== id)
     );
   };
-
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const toggleDrawer = () => {
-    if (isDrawerOpen) {
-      Animated.parallel([
-        Animated.timing(drawerHeight, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: false,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        Animated.timing(drawerOpacity, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: false,
-          easing: Easing.inOut(Easing.ease),
-        }),
-      ]).start(() => setIsDrawerOpen(false));
-    } else {
-      setIsDrawerOpen(true);
-      Animated.parallel([
-        Animated.timing(drawerHeight, {
-          toValue: windowHeight * (isTablet ? 0.8 : 1.2),
-          duration: 300,
-          useNativeDriver: false,
-          easing: Easing.out(Easing.ease),
-        }),
-        Animated.timing(drawerOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: false,
-          easing: Easing.out(Easing.ease),
-        }),
-      ]).start();
-    }
-  };
+    const openDuration = 300;
+    const closeDuration = 200;
 
+    Animated.parallel([
+      Animated.timing(drawerHeight, {
+        toValue: isDrawerOpen ? 0 : windowHeight * (isTablet ? 0.8 : 1.2),
+        duration: isDrawerOpen ? closeDuration : openDuration,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }),
+      Animated.timing(drawerOpacity, {
+        toValue: isDrawerOpen ? 0 : 1,
+        duration: isDrawerOpen ? closeDuration : openDuration,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: isDrawerOpen ? 0 : 0.5, // Fade overlay in or out
+        duration: isDrawerOpen ? closeDuration : openDuration,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      setIsDrawerOpen((previousState) => !previousState);
+    });
+  };
   const subtotal = orderItems.reduce(
     (sum, item) =>
       sum +
@@ -211,119 +231,15 @@ const Orders = () => {
           item.selectedOptions.reduce((sum, option) => sum + option.price, 0)),
     0
   );
-  const discount = subtotal > 50 ? 5 : 0;
+  //const discount = subtotal > 50 ? 5 : 0;
+  const discount = 0;
   const total = subtotal - discount;
-  
-  const renderOrderItem = (item: OrderItem, index: number) => {
-    const optionsText = item.selectedOptions
-      .map((option) => option.name)
-      .join(", ");
 
-    // State to manage the visibility of the "Remove" button for each item
-    const [showRemove, setShowRemove] = useState(false);
-
-    const rightSwipeActions = (
-      progress: Animated.AnimatedInterpolation<number>,
-      dragX: Animated.AnimatedInterpolation<number>
-    ) => {
-      const scale = dragX.interpolate({
-        inputRange:   
- [-100, 0],
-        outputRange: [1, 0],
-        extrapolate: 'clamp',
-      });
-      return (
-        <Animated.View style={{ transform: [{ scale   
- }] }}>
-          <TouchableOpacity
-            style={styles.rightAction}
-            onPress={() => removeItemFromOrder(item.product.id)}
-            accessibilityLabel="Remove item"
-          >
-            <Animated.Text style={styles.actionText}>Remove</Animated.Text>
-          </TouchableOpacity>
-        </Animated.View>
-      );
-    };
-
-    return (
-      <Swipeable
-        renderRightActions={rightSwipeActions}
-        onSwipeableOpen={() => setShowRemove(true)}
-        onSwipeableClose={() => setShowRemove(false)}
-      >
-        <View key={index} style={styles.orderItem}>
-        {orderItems.map((item, index) => {
-              const optionsText = item.selectedOptions
-                .map((option) => option.name)
-                .join(", ");
-
-              return (
-                <View key={index} style={styles.orderItem}>
-                  <View style={styles.orderItemTextContainer}>
-                    <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                      {item.product.nameDisplay}
-                    </Text>
-                    {optionsText ? (
-                      <View style={styles.optionsPriceContainer}>
-                        {item.selectedOptions.map((option, idx) => (
-                          <Text key={idx} style={styles.optionPriceTextItem}>
-                            ({option.name})
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.orderItemQuantityContainer}>
-                    <Text style={[{ fontFamily: "GoogleSans" }]}>
-                      {item.quantity} x{" "}
-                      {parseFloat(item.product.price).toFixed(2)}฿
-                    </Text>
-                    {optionsText ? (
-                      <View style={styles.optionsPriceContainer}>
-                        {item.selectedOptions.map((option, idx) => (
-                          <Text key={idx} style={styles.optionPriceTextItem}>
-                            (+{option.price.toFixed(2)}฿)
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.orderItemPrice}>
-                    {(
-                      item.quantity *
-                      (parseFloat(item.product.price) +
-                        item.selectedOptions.reduce(
-                          (sum, option) => sum + option.price,
-                          0
-                        ))
-                    ).toFixed(2)}
-                    ฿
-                  </Text>
-                  <TouchableOpacity // This TouchableOpacity was missing
-              onPress={() => removeItemFromOrder(item.product.id)}
-              >
-              <Text style={styles.removeItemText}>Remove</Text>
-              </TouchableOpacity>
-               </View>
-                 
-              );
-            })}
-          {showRemove && ( // Conditionally render the "Remove" button
-            <TouchableOpacity onPress={() => removeItemFromOrder(item.product.id)}>
-              <Text style={styles.removeItemText}>Remove</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Swipeable>
-    );
-  };
   const renderProductItem = ({ item }: { item: Product }) => {
     const orderItem = orderItems.find(
       (orderItem) => orderItem.product.id === item.id
     );
-     
-   
+
     const itemQuantity = orderItem ? orderItem.quantity : 0;
 
     const handleIncreaseQuantity = () => addItemToOrder(item);
@@ -343,11 +259,12 @@ const Orders = () => {
     };
 
     return (
-        <ProductItem
+      <ProductItem
         item={item}
         itemQuantity={itemQuantity}
         handleIncreaseQuantity={handleIncreaseQuantity}
         handleDecreaseQuantity={handleDecreaseQuantity}
+        toggleDrawer={toggleDrawer}
         onLongPress={() => {
           const existingSelectedOptions =
             orderItems.find((orderItem) => orderItem.product.id === item.id)
@@ -361,33 +278,98 @@ const Orders = () => {
           setOrderDetailModalVisible(true);
         }}
       />
- 
+    );
+  };
+  const rightSwipeActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+    productId: string
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [1, 0],
+      extrapolate: "clamp",
+    });
+
+    return (
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <TouchableOpacity
+          style={styles.rightAction}
+          onPress={() => removeItemFromOrder(productId)}
+        >
+          <Text style={styles.actionText}>Remove</Text>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
 
   const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (evt, gestureState) =>
-      Math.abs(gestureState.dy) > 20,
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      const hasSufficientSpeed = Math.abs(gestureState.vy) > 0.1;
+      return isVerticalSwipe && hasSufficientSpeed && !isDrawerOpen; // Allow gesture only if the drawer is closed
+    },
     onPanResponderMove: (evt, gestureState) => {
-      if (!isDrawerOpen && gestureState.dy < 0) {
-        Animated.event([null, { dy: drawerHeight }], {
-          useNativeDriver: false,
-        })(evt, gestureState);
-      } else if (isDrawerOpen && gestureState.dy > 0) {
-        Animated.event([null, { dy: drawerHeight }], {
-          useNativeDriver: false,
-        })(evt, gestureState);
+      if (!isDrawerOpen) {
+        const newHeight = gestureState.dy > 0 ? gestureState.dy : 0;
+        drawerHeight.setValue(newHeight);
+        drawerOpacity.setValue(newHeight / (windowHeight * (isTablet ? 0.8 : 1.2)));
+        overlayOpacity.setValue(newHeight / (windowHeight * (isTablet ? 0.8 : 1.2)) * 0.5);
       }
     },
     onPanResponderRelease: (evt, gestureState) => {
-      if (!isDrawerOpen && gestureState.dy < -50) {
-        toggleDrawer();
-      } else if (isDrawerOpen && gestureState.dy > 50) {
-        toggleDrawer();
+      if (!isDrawerOpen) {
+        const threshold = windowHeight * (isTablet ? 0.4 : 0.6);
+        const shouldOpen = gestureState.dy > threshold || gestureState.vy > 0.5;
+
+        if (shouldOpen) {
+          Animated.timing(drawerHeight, {
+            toValue: windowHeight * (isTablet ? 0.8 : 1.2),
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start(() => {
+            setIsDrawerOpen(true);
+          });
+          Animated.timing(drawerOpacity, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start();
+          Animated.timing(overlayOpacity, {
+            toValue: 0.5,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start();
+        } else {
+          Animated.timing(drawerHeight, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start(() => {
+            setIsDrawerOpen(false);
+          });
+          Animated.timing(drawerOpacity, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start();
+          Animated.timing(overlayOpacity, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }).start();
+        }
       }
     },
   });
-  
+
+
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
       {orderDetailModalVisible && (
@@ -500,15 +482,15 @@ const Orders = () => {
               )}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <FlatList
-                data={filteredProducts}
-                renderItem={renderProductItem}
-                keyExtractor={(item) => item.id}
-                numColumns={numColumns}
-                key={numColumns}
-                initialNumToRender={numColumns * 2}
-                contentContainerStyle={styles.productListContainer}
-              />
+            <FlatList
+  data={filteredProducts}
+  renderItem={renderProductItem}
+  keyExtractor={(item) => item.id}
+  numColumns={numColumns} // Dynamically calculated columns
+  key={numColumns} // Forces re-render when columns change
+  initialNumToRender={numColumns * 2}
+  contentContainerStyle={styles.productListContainer}
+/>
             </ScrollView>
 
             {isMobile && (
@@ -529,21 +511,94 @@ const Orders = () => {
           </View>
         )}
       </View>
+
       {isMobile && (
-  <Animated.View
-    {...panResponder.panHandlers}
-    style={[
-      styles.animatedDrawer,
-      { height: drawerHeight, opacity: drawerOpacity },
-    ]}
-  >
-    <View style={styles.orderSummaryContainer}>
+        
+       <Animated.View
+       {...panResponder.panHandlers}
+       style={[
+         styles.animatedDrawer,
+         {
+           height: drawerHeight,
+           opacity: drawerOpacity,
+           transform: [
+             {
+               translateY: drawerHeight.interpolate({
+                 inputRange: [0, windowHeight * (isTablet ? 0.8 : 1.2)],
+                 outputRange: [windowHeight * (isTablet ? 0.8 : 1.2), 0],
+               }),
+             },
+           ],
+         },
+       ]}
+        >
+          <View style={styles.orderSummaryContainer}>
             <Text
               style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
             >
               Order Summary
             </Text>
-            {orderItems.map((item, index) => renderOrderItem(item, index))}
+            <ScrollView>
+              {orderItems.map((item, index) => (
+                <Swipeable
+                  key={item.product.id}
+                  renderRightActions={(progress, dragX) =>
+                    rightSwipeActions(progress, dragX, item.product.id)
+                  }
+                >
+                  <Animated.View style={{ transform: [{ scale: animation }] }}>
+                    <View key={index} style={styles.orderItem}>
+                      <View style={styles.orderItemTextContainer}>
+                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                          {item.product.nameDisplay}
+                        </Text>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                ({option.name})
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.orderItemQuantityContainer}>
+                        <Text style={[{ fontFamily: "GoogleSans", color: "#808080",fontSize: 16  }]}>
+                          {item.quantity} x{" "}
+                          {parseFloat(item.product.price).toFixed(0)}฿
+                        </Text>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                (+{option.price.toFixed(0)}฿)
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.orderItemPrice}>
+                        {(
+                          item.quantity *
+                          (parseFloat(item.product.price) +
+                            item.selectedOptions.reduce(
+                              (sum, option) => sum + option.price,
+                              0
+                            ))
+                        ).toFixed(0)}
+                        ฿
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </Swipeable>
+              ))}
+            </ScrollView>
             <View style={styles.orderTotalContainer}>
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>
@@ -560,7 +615,7 @@ const Orders = () => {
                 <Text
                   style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
                 >
-                  {subtotal.toFixed(2)}฿
+                  {subtotal.toFixed(0)}฿
                 </Text>
               </View>
               <View style={styles.orderTotalRow}>
@@ -568,20 +623,23 @@ const Orders = () => {
                 <Text
                   style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
                 >
-                  {discount.toFixed(2)}฿
+                  {discount.toFixed(0)}฿
                 </Text>
               </View>
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
+                  style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}
                 >
-                  {total.toFixed(2)}฿
+                  {total.toFixed(0)}฿
                 </Text>
               </View>
             </View>
             <TouchableOpacity style={styles.proceedButton}>
               <Text style={styles.proceedButtonText}>Proceed to Payment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.CloseButton} onPress={toggleDrawer}>
+              <Text style={styles.CloseButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -595,61 +653,67 @@ const Orders = () => {
             >
               Order Summary
             </Text>
-            {orderItems.map((item, index) => {
-              const optionsText = item.selectedOptions
-                .map((option) => option.name)
-                .join(", ");
-             return (
-                <View key={index} style={styles.orderItem}>
-                  <View style={styles.orderItemTextContainer}>
-                    <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                      {item.product.nameDisplay}
-                    </Text>
-                    {optionsText ? (
-                      <View style={styles.optionsPriceContainer}>
-                        {item.selectedOptions.map((option, idx) => (
-                          <Text key={idx} style={styles.optionPriceTextItem}>
-                            ({option.name})
-                          </Text>
-                        ))}
+            <ScrollView>
+              {orderItems.map((item, index) => (
+                <Swipeable
+                  key={item.product.id}
+                  renderRightActions={(progress, dragX) =>
+                    rightSwipeActions(progress, dragX, item.product.id)
+                  }
+                >
+                  <Animated.View style={{ transform: [{ scale: animation }] }}>
+                    <View style={styles.orderItem}>
+                      <View style={styles.orderItemTextContainer}>
+                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                          {item.product.nameDisplay}
+                        </Text>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                ({option.name})
+                              </Text>
+                            ))}
+                          </View>
+                        )}
                       </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.orderItemQuantityContainer}>
-                    <Text style={[{ fontFamily: "GoogleSans" }]}>
-                      {item.quantity} x{" "}
-                      {parseFloat(item.product.price).toFixed(2)}฿
-                    </Text>
-                    {optionsText ? (
-                      <View style={styles.optionsPriceContainer}>
-                        {item.selectedOptions.map((option, idx) => (
-                          <Text key={idx} style={styles.optionPriceTextItem}>
-                            (+{option.price.toFixed(2)}฿)
-                          </Text>
-                        ))}
+                      <View style={styles.orderItemQuantityContainer}>
+                        <Text style={[{ fontFamily: "GoogleSans", color: "#808080",fontSize: 16 }]}>
+                          {item.quantity} x{" "}
+                          {parseFloat(item.product.price).toFixed(0)}฿
+                        </Text>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                (+{option.price.toFixed(0)}฿)
+                              </Text>
+                            ))}
+                          </View>
+                        )}
                       </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.orderItemPrice}>
-                    {(
-                      item.quantity *
-                      (parseFloat(item.product.price) +
-                        item.selectedOptions.reduce(
-                          (sum, option) => sum + option.price,
-                          0
-                        ))
-                    ).toFixed(2)}
-                    ฿
-                  </Text>
-                  
-                  <TouchableOpacity // This TouchableOpacity was missing
-              onPress={() => removeItemFromOrder(item.product.id)}
-            >
-              <Text style={styles.removeItemText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-              );
-            })}
+                      <Text style={styles.orderItemPrice}>
+                        {(
+                          item.quantity *
+                          (parseFloat(item.product.price) +
+                            item.selectedOptions.reduce(
+                              (sum, option) => sum + option.price,
+                              0
+                            ))
+                        ).toFixed(0)}
+                        ฿
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </Swipeable>
+              ))}
+            </ScrollView>
             <View style={styles.orderTotalContainer}>
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>
@@ -666,7 +730,7 @@ const Orders = () => {
                 <Text
                   style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
                 >
-                  {subtotal.toFixed(2)}฿
+                  {subtotal.toFixed(0)}฿
                 </Text>
               </View>
               <View style={styles.orderTotalRow}>
@@ -674,15 +738,15 @@ const Orders = () => {
                 <Text
                   style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
                 >
-                  {discount.toFixed(2)}฿
+                  {discount.toFixed(0)}฿
                 </Text>
               </View>
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
+                  style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}
                 >
-                  {total.toFixed(2)}฿
+                  {total.toFixed(0)}฿
                 </Text>
               </View>
             </View>
@@ -722,6 +786,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 10,
   },
+
   orderItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -745,6 +810,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   orderItemPrice: {
+    fontFamily: "GoogleSans",
     fontSize: 16,
     color: "#333",
   },
@@ -772,8 +838,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   orderSummaryContainer: {
+    maxHeight: isMobile ? "95%" : '100%',
+     
     padding: 20,
-    backgroundColor: "#f7f7f7",
+    backgroundColor: isMobile ? "rgba(255, 255, 255, 0.5)" : "#f7f7f7",
     borderRadius: 15,
     shadowColor: "#000",
     shadowOpacity: 0.15,
@@ -809,7 +877,7 @@ const styles = StyleSheet.create({
     width: "36%",
     height: "100%",
     padding: 15,
-    backgroundColor: "#f7f7f7",
+    
   },
   tabsContainer: {
     flexDirection: "row",
@@ -860,6 +928,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
+    
   },
   proceedButton: {
     backgroundColor: "#9969c7",
@@ -874,7 +943,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-
+  CloseButton: {
+    backgroundColor: "#bbbbbb",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 20,
+    elevation: 3,
+  },
+  CloseButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
   productListContainer: {
     flexGrow: 1,
     marginBottom: 40,
@@ -944,6 +1025,7 @@ const styles = StyleSheet.create({
   layoutMobile: {
     flex: 1,
     padding: 10,
+   
   },
 
   scrollViewContent: {
@@ -971,14 +1053,21 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   rightAction: {
-    backgroundColor: '#dd2c00',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    backgroundColor: "red",
+    padding: 10,
+    height: "100%",
+    borderRadius: 6,
   },
   actionText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "bold",
+  },
+
+  orderItemSwipeableContainer: {
+    marginBottom: 10,
   },
 });
 
