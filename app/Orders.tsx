@@ -12,15 +12,18 @@ import {
   ScrollView,
   Platform,
   Vibration,
+  Alert,
 } from "react-native";
 import { db, ref, onValue } from "./firebase";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
 import { Swipeable } from "react-native-gesture-handler";
-import { transform } from "lodash";
+import { database } from "../app/firebase";
+import { get, set } from "firebase/database";
+import AntDesign from '@expo/vector-icons/AntDesign';
 
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -28,24 +31,41 @@ const isMobile = windowWidth <= 768;
 const isTablet = windowWidth > 768 && windowWidth <= 1024;
 
 const Orders = () => {
-  const calculateNumColumns = useCallback(() => {
-    const screenWidth = Dimensions.get("window").width;
-  
-    // Handle ranges more clearly
-    if (screenWidth < 500) return 2; // Small screens
-    if (screenWidth >= 768 && screenWidth <= 1024) return 3; // Tablets or medium screens
-    return 4; // Larger screens
+  const { width, height } = Dimensions.get("window");
+  const calculateNumColumns = () => {
+    if (width < 768) {
+      return 2;
+    } else if (width <= 1024) {
+      return 3;
+    } else {
+      return 3;
+    }
+  };
+
+  useEffect(() => {
+    const onChange = () => {
+      setNumColumns(calculateNumColumns());
+    };
+
+    const dimensionsSubscription = Dimensions.addEventListener(
+      "change",
+      onChange
+    );
+
+    return () => {
+      dimensionsSubscription.remove();
+    };
   }, []);
 
   const [selectedOptions, setSelectedOptions] = useState<{
     [key: string]: Option[];
   }>({});
+  const [numColumns, setNumColumns] = useState(calculateNumColumns);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [orderDetailModalVisible, setOrderDetailModalVisible] = useState(false);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [numColumns, setNumColumns] = useState(calculateNumColumns());
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -54,6 +74,7 @@ const Orders = () => {
   );
   const drawerHeight = useRef(new Animated.Value(0)).current;
   const drawerOpacity = useRef(new Animated.Value(0)).current;
+  const [queueNumber, setQueueNumber] = useState<number | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   const animateOrderItem = () => {
     // Animates scaling of the item
@@ -85,18 +106,179 @@ const Orders = () => {
     }
     return [];
   };
+  const [selectedOrderType, setSelectedOrderType] = useState("Dine In");
+
+  const handleSelect = (type: string) => {
+    setSelectedOrderType(type); // Set the selected type
+  };
+  const [receiptNumber, setReceiptNumber] = useState("Loading...");
+
   useEffect(() => {
-    const handleDimensionsChange = () => {
-      setNumColumns(calculateNumColumns());
+    const fetchQueueNumber = async () => {
+      const queueRef = ref(database, "lastQueueNumber");
+      const snapshot = await get(queueRef);
+
+      if (snapshot.exists()) {
+        setQueueNumber(snapshot.val());
+      } else {
+        // Initialize the queue number to 1 if it doesn't exist
+        setQueueNumber(1);
+        set(queueRef, 1);
+      }
     };
 
-    const subscription = Dimensions.addEventListener("change", handleDimensionsChange);
+    fetchQueueNumber();
+  }, []);
 
-    // Cleanup listener on unmount
-    return () => {
-      subscription?.remove();
+  // Function to increment and update queue number
+  const incrementQueueNumber = async () => {
+    if (queueNumber !== null) {
+      const newQueueNumber = queueNumber + 1;
+      setQueueNumber(newQueueNumber);
+
+      // Update the new queue number in Firebase
+      const queueRef = ref(database, "lastQueueNumber");
+      await set(queueRef, newQueueNumber);
+    }
+  };
+  const [formattedDate, setFormattedDate] = useState("");
+  const [hour, setHour] = useState("");
+  const [minute, setMinute] = useState("");
+  const [second, setSecond] = useState("");
+
+  const fadeAnimHour = useRef(new Animated.Value(1)).current;
+  const fadeAnimMinute = useRef(new Animated.Value(1)).current;
+  const fadeAnimSecond = useRef(new Animated.Value(1)).current;
+
+  const translateYAnimHour = useRef(new Animated.Value(0)).current;
+  const translateYAnimMinute = useRef(new Animated.Value(0)).current;
+  const translateYAnimSecond = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const updateDateTime = () => {
+      const date = new Date();
+
+      // Format date
+      const dateOptions: Intl.DateTimeFormatOptions = {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      };
+      setFormattedDate(
+        new Intl.DateTimeFormat("en-US", dateOptions).format(date)
+      );
+
+      // Update hour, minute, and second separately
+      setHour(
+        date
+          .toLocaleString("en-US", { hour: "2-digit", hour12: false })
+          .padStart(2, "0")
+      );
+      setMinute(
+        date.toLocaleString("en-US", { minute: "2-digit" }).padStart(2, "0")
+      );
+      setSecond(
+        date.toLocaleString("en-US", { second: "2-digit" }).padStart(2, "0")
+      ); // Ensure two-digit format
     };
-  }, [calculateNumColumns]);
+
+    // Initial setup
+    updateDateTime();
+
+    const intervalId = setInterval(() => {
+      const date = new Date();
+
+      // Start separate animations based on whether each unit changes
+      const newHour = date
+        .toLocaleString("en-US", {
+          hour: "2-digit",
+          hour12: false,
+        })
+        .padStart(2, "0");
+      const newMinute = date
+        .toLocaleString("en-US", { minute: "2-digit" })
+        .padStart(2, "0");
+      const newSecond = date
+        .toLocaleString("en-US", { second: "2-digit" })
+        .padStart(2, "0"); // Ensure two-digit format
+
+      if (newHour !== hour) {
+        animateChange(fadeAnimHour, translateYAnimHour, () => setHour(newHour));
+      }
+      if (newMinute !== minute) {
+        animateChange(fadeAnimMinute, translateYAnimMinute, () =>
+          setMinute(newMinute)
+        );
+      }
+      if (newSecond !== second) {
+        animateChange(fadeAnimSecond, translateYAnimSecond, () =>
+          setSecond(newSecond)
+        ); // Update condition for seconds
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [hour, minute, second]);
+
+  const animateChange = (
+    fadeAnim: Animated.Value,
+    translateYAnim: Animated.Value,
+    setTime: () => void
+  ) => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateYAnim, {
+        toValue: -10,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setTime();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateYAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
+
+  const fetchLastReceiptNumber = async () => {
+    const receiptRef = ref(database, "lastReceiptNumber");
+    const snapshot = await get(receiptRef);
+
+    if (snapshot.exists()) {
+      setReceiptNumber(snapshot.val().toString());
+    } else {
+      const initialReceipt = 1000;
+      setReceiptNumber(initialReceipt.toString());
+      set(receiptRef, initialReceipt);
+    }
+  };
+
+  const incrementReceiptNumber = async () => {
+    const newReceiptNumber = parseInt(receiptNumber, 10) + 1;
+    setReceiptNumber(newReceiptNumber.toString());
+
+    // Update the new receipt number in Firebase
+    const receiptRef = ref(database, "lastReceiptNumber");
+    await set(receiptRef, newReceiptNumber);
+  };
+
+  // Fetch receipt number on mount
+  useEffect(() => {
+    fetchLastReceiptNumber();
+  }, []);
   useEffect(() => {
     const categoriesRef = ref(db, "categories");
     const productsRef = ref(db, "products");
@@ -124,6 +306,7 @@ const Orders = () => {
               imageUrl: productData.imageUrl || undefined,
               categoryId: productData.categoryId,
               status: productData.status,
+              productSize: productData.productSize,
               description: productData.description,
               options: validateOptions(productData.options),
             };
@@ -231,6 +414,23 @@ const Orders = () => {
           item.selectedOptions.reduce((sum, option) => sum + option.price, 0)),
     0
   );
+  const confirmClearOrderItems = () => {
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to clear all items?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "OK",
+          onPress: () => setOrderItems([]), // Clear all items on confirmation
+        },
+      ],
+      { cancelable: true }
+    );
+  };
   //const discount = subtotal > 50 ? 5 : 0;
   const discount = 0;
   const total = subtotal - discount;
@@ -305,7 +505,8 @@ const Orders = () => {
 
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (evt, gestureState) => {
-      const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      const isVerticalSwipe =
+        Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
       const hasSufficientSpeed = Math.abs(gestureState.vy) > 0.1;
       return isVerticalSwipe && hasSufficientSpeed && !isDrawerOpen; // Allow gesture only if the drawer is closed
     },
@@ -313,8 +514,12 @@ const Orders = () => {
       if (!isDrawerOpen) {
         const newHeight = gestureState.dy > 0 ? gestureState.dy : 0;
         drawerHeight.setValue(newHeight);
-        drawerOpacity.setValue(newHeight / (windowHeight * (isTablet ? 0.8 : 1.2)));
-        overlayOpacity.setValue(newHeight / (windowHeight * (isTablet ? 0.8 : 1.2)) * 0.5);
+        drawerOpacity.setValue(
+          newHeight / (windowHeight * (isTablet ? 0.8 : 1.2))
+        );
+        overlayOpacity.setValue(
+          (newHeight / (windowHeight * (isTablet ? 0.8 : 1.2))) * 0.5
+        );
       }
     },
     onPanResponderRelease: (evt, gestureState) => {
@@ -368,7 +573,6 @@ const Orders = () => {
       }
     },
   });
-
 
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
@@ -482,15 +686,15 @@ const Orders = () => {
               )}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <FlatList
-  data={filteredProducts}
-  renderItem={renderProductItem}
-  keyExtractor={(item) => item.id}
-  numColumns={numColumns} // Dynamically calculated columns
-  key={numColumns} // Forces re-render when columns change
-  initialNumToRender={numColumns * 2}
-  contentContainerStyle={styles.productListContainer}
-/>
+              <FlatList
+                data={filteredProducts}
+                renderItem={renderProductItem}
+                keyExtractor={(item) => item.id}
+                numColumns={numColumns} // Dynamically calculated columns
+                key={numColumns} // Forces re-render when columns change
+                initialNumToRender={numColumns * 2}
+                contentContainerStyle={styles.productListContainer}
+              />
             </ScrollView>
 
             {isMobile && (
@@ -513,31 +717,129 @@ const Orders = () => {
       </View>
 
       {isMobile && (
-        
-       <Animated.View
-       {...panResponder.panHandlers}
-       style={[
-         styles.animatedDrawer,
-         {
-           height: drawerHeight,
-           opacity: drawerOpacity,
-           transform: [
-             {
-               translateY: drawerHeight.interpolate({
-                 inputRange: [0, windowHeight * (isTablet ? 0.8 : 1.2)],
-                 outputRange: [windowHeight * (isTablet ? 0.8 : 1.2), 0],
-               }),
-             },
-           ],
-         },
-       ]}
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.animatedDrawer,
+            {
+              height: drawerHeight,
+              opacity: drawerOpacity,
+              transform: [
+                {
+                  translateY: drawerHeight.interpolate({
+                    inputRange: [0, windowHeight * (isTablet ? 0.8 : 1.2)],
+                    outputRange: [windowHeight * (isTablet ? 0.8 : 1.2), 0],
+                  }),
+                },
+              ],
+            },
+          ]}
         >
           <View style={styles.orderSummaryContainer}>
             <Text
-              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
-            >
+              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}>
               Order Summary
             </Text>
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                
+                <Text style={styles.orderHeaderText}>
+                  {" "}
+                  Receipt No.{receiptNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+              
+                <Text style={styles.orderHeaderText}>
+                  {" "}
+                  Queue No. #{queueNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
+                <AntDesign name="printer" size={16} color="black" />
+                </TouchableOpacity>
+               
+                <TouchableOpacity style={ styles.circleButton} onPress={confirmClearOrderItems}>
+                <Ionicons name="trash-outline" size={16} color="#E21818" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={18}
+                  color="#9969c7"
+                />
+                <Text style={styles.orderHeaderText}> Cashier 1</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons name="calendar-outline" size={18} color="#9969c7" />
+                <Text style={styles.dateText}> {formattedDate}</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons name="time-outline" size={18} color="#9969c7" />
+                <View style={styles.timeContainer}>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimHour,
+                        transform: [{ translateY: translateYAnimHour }],
+                      },
+                    ]}
+                  >
+                    {hour}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimMinute,
+                        transform: [{ translateY: translateYAnimMinute }],
+                      },
+                    ]}
+                  >
+                    {minute}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimSecond,
+                        transform: [{ translateY: translateYAnimSecond }],
+                      },
+                    ]}
+                  >
+                    {second}
+                  </Animated.Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.orderHeader}>
+              {["Dine In", "Take Away", "Delivery"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.buttonHeader,
+                    selectedOrderType === type && styles.selectedButton, // Apply selected style
+                  ]}
+                  onPress={() => handleSelect(type)}
+                >
+                  <Text
+                    style={[
+                      styles.buttonHeaderText,
+                      selectedOrderType === type && styles.selectedText, // Apply selected text style
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <ScrollView>
               {orderItems.map((item, index) => (
                 <Swipeable
@@ -550,7 +852,7 @@ const Orders = () => {
                     <View key={index} style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
                         <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product.nameDisplay}
+                        {item.product.nameDisplay} {item.product.productSize ? ` (${item.product.productSize})` : ""}
                         </Text>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
@@ -566,7 +868,15 @@ const Orders = () => {
                         )}
                       </View>
                       <View style={styles.orderItemQuantityContainer}>
-                        <Text style={[{ fontFamily: "GoogleSans", color: "#808080",fontSize: 16  }]}>
+                        <Text
+                          style={[
+                            {
+                              fontFamily: "GoogleSans",
+                              color: "#808080",
+                              fontSize: 16,
+                            },
+                          ]}
+                        >
                           {item.quantity} x{" "}
                           {parseFloat(item.product.price).toFixed(0)}฿
                         </Text>
@@ -629,13 +939,26 @@ const Orders = () => {
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}
+                  style={[
+                    {
+                      fontFamily: "GoogleSans",
+                      textAlign: "right",
+                      fontSize: 18,
+                      fontWeight: "bold",
+                    },
+                  ]}
                 >
                   {total.toFixed(0)}฿
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.proceedButton}>
+            <TouchableOpacity
+              style={styles.proceedButton}
+              onPress={() => {
+                incrementReceiptNumber();
+                incrementQueueNumber();
+              }}
+            >
               <Text style={styles.proceedButtonText}>Proceed to Payment</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.CloseButton} onPress={toggleDrawer}>
@@ -653,6 +976,107 @@ const Orders = () => {
             >
               Order Summary
             </Text>
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                
+                <Text style={styles.orderHeaderText}>
+                  {" "}
+                  Receipt No.{receiptNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+               
+                <Text style={styles.orderHeaderText}>
+                  {" "}
+                  Queue: #{queueNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
+                <AntDesign name="printer" size={16} color="black" />
+                </TouchableOpacity>
+               
+                <TouchableOpacity style={ styles.circleButton} onPress={confirmClearOrderItems}>
+                <Ionicons name="trash-outline" size={16} color="#E21818" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={18}
+                  color="#9969c7"
+                />
+                <Text style={styles.orderHeaderText}> Cashier 1</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons name="calendar-outline" size={18} color="#9969c7" />
+                <Text style={styles.dateText}> {formattedDate}</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Ionicons name="time-outline" size={18} color="#9969c7" />
+                <View style={styles.timeContainer}>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimHour,
+                        transform: [{ translateY: translateYAnimHour }],
+                      },
+                    ]}
+                  >
+                    {hour}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimMinute,
+                        transform: [{ translateY: translateYAnimMinute }],
+                      },
+                    ]}
+                  >
+                    {minute}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimSecond,
+                        transform: [{ translateY: translateYAnimSecond }],
+                      },
+                    ]}
+                  >
+                    {second}
+                  </Animated.Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.orderHeader}>
+              {["Dine In", "Take Away", "Delivery"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.buttonHeader,
+                    selectedOrderType === type && styles.selectedButton, // Apply selected style
+                  ]}
+                  onPress={() => handleSelect(type)}
+                >
+                  <Text
+                    style={[
+                      styles.buttonHeaderText,
+                      selectedOrderType === type && styles.selectedText, // Apply selected text style
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <ScrollView>
               {orderItems.map((item, index) => (
                 <Swipeable
@@ -665,7 +1089,7 @@ const Orders = () => {
                     <View style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
                         <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product.nameDisplay}
+                        {item.product.nameDisplay}{item.product.productSize ? ` (${item.product.productSize})` : ""}
                         </Text>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
@@ -681,7 +1105,15 @@ const Orders = () => {
                         )}
                       </View>
                       <View style={styles.orderItemQuantityContainer}>
-                        <Text style={[{ fontFamily: "GoogleSans", color: "#808080",fontSize: 16 }]}>
+                        <Text
+                          style={[
+                            {
+                              fontFamily: "GoogleSans",
+                              color: "#808080",
+                              fontSize: 16,
+                            },
+                          ]}
+                        >
                           {item.quantity} x{" "}
                           {parseFloat(item.product.price).toFixed(0)}฿
                         </Text>
@@ -744,13 +1176,26 @@ const Orders = () => {
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}
+                  style={[
+                    {
+                      fontFamily: "GoogleSans",
+                      textAlign: "right",
+                      fontSize: 18,
+                      fontWeight: "bold",
+                    },
+                  ]}
                 >
                   {total.toFixed(0)}฿
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.proceedButton}>
+            <TouchableOpacity
+              style={styles.proceedButton}
+              onPress={() => {
+                incrementReceiptNumber();
+                incrementQueueNumber();
+              }}
+            >
               <Text style={styles.proceedButtonText}>Proceed to Payment</Text>
             </TouchableOpacity>
           </View>
@@ -759,7 +1204,9 @@ const Orders = () => {
     </View>
   );
 };
-
+const screenWidth = Dimensions.get("window").width;
+const screenHeight = Dimensions.get("window").height;
+const isPortrait = screenHeight < screenWidth;
 const styles = StyleSheet.create({
   container: isMobile
     ? {
@@ -791,6 +1238,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingHorizontal: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderColor: "#ccc",
@@ -838,8 +1286,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   orderSummaryContainer: {
-    maxHeight: isMobile ? "95%" : '100%',
-     
+    height: isMobile ? "74%" : "100%",
     padding: 20,
     backgroundColor: isMobile ? "rgba(255, 255, 255, 0.5)" : "#f7f7f7",
     borderRadius: 15,
@@ -848,11 +1295,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   orderSummaryTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#444",
-    marginBottom: 15,
-    textAlign: "center",
+    color: "#aaaaaa",
+    marginBottom: 5,
   },
 
   optionsContainer: {
@@ -869,20 +1315,25 @@ const styles = StyleSheet.create({
     color: "#888",
   },
   layout1: {
-    width: "64%",
+    width:
+      screenWidth >= 768 && screenWidth <= 1024
+        ? isPortrait
+          ? "100%" // In portrait mode, layout1 takes 100% width
+          : "64%" // In landscape mode, layout1 takes 64% width
+        : "64%", // Default width for other screen sizes
     justifyContent: "center",
     alignItems: "center",
   },
   layout2: {
-    width: "36%",
+    width:
+      screenWidth >= 768 && screenWidth <= 1024 && isPortrait ? "0%" : "38%", // Hide layout2 in portrait mode
     height: "100%",
-    padding: 15,
-    
+    marginLeft: 5,
   },
   tabsContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 10,
+    marginTop: 10,
   },
   tab: {
     padding: 10,
@@ -928,7 +1379,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
-    
   },
   proceedButton: {
     backgroundColor: "#9969c7",
@@ -963,7 +1413,7 @@ const styles = StyleSheet.create({
   scrollHintIcon: {
     justifyContent: "center",
     right: -10,
-    bottom: 5,
+    top: 5,
   },
 
   cardImageContainer: {
@@ -1025,7 +1475,6 @@ const styles = StyleSheet.create({
   layoutMobile: {
     flex: 1,
     padding: 10,
-   
   },
 
   scrollViewContent: {
@@ -1068,6 +1517,77 @@ const styles = StyleSheet.create({
 
   orderItemSwipeableContainer: {
     marginBottom: 10,
+  },
+  orderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    marginRight: 10,
+  },
+  orderHeaderText: {
+    color: "#444",
+    fontSize: 14,
+  },
+  dateText: {
+    fontSize: 14,
+    color: "#606060",
+  },
+  timeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  timeText: {
+    fontSize: 14,
+    color: "#606060",
+  },
+  timeSeparator: {
+    fontSize: 14,
+    marginHorizontal: 2,
+    color: "#606060",
+  },
+  orderHeaderGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+ 
+  buttonHeader: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    marginRight: 10,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: "transparent", // Default border color
+  },
+  buttonHeaderText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#444",
+  },
+  selectedButton: {
+    borderColor: "#6a1b9a", // Border color when selected
+  },
+  selectedText: {
+    color: "#6a1b9a", // Text color when selected
+  },
+  circleButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderRadius: 50,
+    padding:5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: "transparent", // Default border color
   },
 });
 

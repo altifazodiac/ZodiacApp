@@ -26,7 +26,6 @@ type OrderDetail = {
   name: string;
   price: number;
   status: boolean;
-  options: { name: string; price: number }[];
 };
 
 // Styled components for UI
@@ -62,7 +61,6 @@ const OrderDetailComponent = () => {
   const [OrderDetail, setOrderDetail] = useState<OrderDetail[]>([]);
   const [name, setName] = useState('');
   const [price, setPrice] = useState<number | string>(''); // Handle number or empty string
-  const [options, setOptions] = useState<{ name: string; price: number }[]>([]);
   const [status, setStatus] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -73,7 +71,10 @@ const OrderDetailComponent = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const dimensions = useWindowDimensions(); // To handle responsive changes
+  const [nameError, setNameError] = useState(false); 
+  const [priceError, setPriceError] = useState(false);
 
+   
   useEffect(() => {
     const OrderDetailRef = ref(database, 'OrderDetail');
     const unsubscribe = onValue(OrderDetailRef, (snapshot) => {
@@ -115,17 +116,25 @@ const OrderDetailComponent = () => {
           OrderDetail.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
   }, [OrderDetail, searchQuery]);
-
+  function resetForm() {
+    setName('');
+    setPrice(0);
+    setStatus(false);
+  }
   const handleCreate = () => {
+
     const OrderDetailRef = ref(database, 'OrderDetail');
     const orderPrice = typeof price === 'string' ? parseFloat(price) : price;
-  
+    if (nameError || priceError || !name || orderPrice < 0) {
+      alert('Please fill in all fields correctly.'); 
+      return;
+    }
     if (isNaN(orderPrice)) {
       Alert.alert('Error', 'Please enter a valid price.');
       return;
     }
   
-    const orderData = { name, price: orderPrice, status, options: options.length ? options : [] };
+    const orderData = { name, price: orderPrice, status};
   
     if (isEditing && editId) {
       const updateRef = ref(database, `OrderDetail/${editId}`);
@@ -153,7 +162,6 @@ const OrderDetailComponent = () => {
     setName('');
     setPrice(0);
     setStatus(false);
-    setOptions([]);
     closeDrawer();
     setIsEditing(false);
   };
@@ -162,7 +170,7 @@ const OrderDetailComponent = () => {
     setName(item.name);
     setPrice(item.price.toString()); // Convert number to string for input
     setStatus(item.status);
-    setOptions(item.options);
+    
     setEditId(item.id);
     setIsEditing(true);
     openDrawer();
@@ -182,7 +190,6 @@ const OrderDetailComponent = () => {
   const closeDrawer = () => {
     setName('');
     setPrice(0);
-    setOptions([]);
     setStatus(false);
     setIsEditing(false);
     setEditId(null);
@@ -252,13 +259,14 @@ const OrderDetailComponent = () => {
           value={searchQuery}
           onChangeText={handleSearchChange}
           placeholder="Search OrderDetail"
+          placeholderTextColor="gray" // Add this line
         />
         {searchQuery !== '' && (
           <ClearButton onPress={resetSearch}>
             <Ionicons name="close-circle" size={20} color="gray" />
           </ClearButton>
         )}
-        <AddButton onPress={openDrawer}>
+        <AddButton onPress={openDrawer} style={{ marginLeft: 10 }}>
           <AntDesign name="edit" size={20} color="#fff" />
         </AddButton>
       </SearchBarContainer>
@@ -270,17 +278,17 @@ const OrderDetailComponent = () => {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.OrderDetailItem}>
-              <Text>{item.name}</Text>
+              <Text style={{ marginLeft: 20 }}>{item.name}</Text>
               <Text>{item.price}</Text>
               <Switch
                 value={item.status}
                 onValueChange={(value) => update(ref(database, `OrderDetail/${item.id}`), { status: value })}
               />
               <View style={styles.buttonGroup}>
-                <TouchableOpacity onPress={() => handleEdit(item)}>
+                <TouchableOpacity onPress={() => handleEdit(item)} style={{ marginRight: 20 }}>
                   <AntDesign name="edit" size={24} color="#9969c7" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ marginRight: 20 }}>
                   <AntDesign name="delete" size={24} color="#9969c7" />
                 </TouchableOpacity>
               </View>
@@ -308,15 +316,17 @@ const OrderDetailComponent = () => {
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder={isEditing ? 'Edit OrderDetail Name' : 'Create OrderDetail Name'}
+            placeholder={isEditing ? 'Edit Name' : 'Create Name'}
             style={styles.input}
+            placeholderTextColor="gray" // Add this line
           />
           <TextInput
             value={price.toString()} // Ensuring price is a string
             onChangeText={(text) => setPrice(parseFloat(text) || 0)} // Parsing to number
-            placeholder={isEditing ? 'Edit OrderDetail Price' : 'Create OrderDetail Price'}
+            placeholder={isEditing ? 'Edit Price' : 'Create Price'}
             keyboardType="numeric"
             style={styles.input}
+            placeholderTextColor="gray" // Add this line
           />
           
           <View style={styles.switchContainer}>
@@ -378,6 +388,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 10,
   },
+  inputHolder: {
+    color: '#dddddd',
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+  },
   switchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -417,9 +436,5 @@ const styles = StyleSheet.create({
 });
 
 export default OrderDetailComponent;
-function resetForm() {
-  setName('');
-  setPrice(0);
-  setStatus(false);
-}
+
 

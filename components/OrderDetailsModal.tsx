@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,14 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Animated, 
-  Platform, Easing
+  Animated,
+  Platform,
+  Easing,
 } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
 import { Option, Product } from "../Data/types";
+import { ref, onValue } from "firebase/database";
+import { database } from "../app/firebase";
 
 interface Props {
   visible: boolean;
@@ -54,28 +57,58 @@ const OrderDetailsModal: React.FC<Props> = ({
   addItemToOrder,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
-  const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current; // Start off-screen
+
+  // Start off-screen and with zero opacity
+  const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  const [options, setOptions] = useState<Option[]>([]);
 
   useEffect(() => {
-    const animationConfig = {
-      toValue: visible ? 0 : Dimensions.get("window").height, // Slide in or out
-      duration: visible ? 400 : 300, // Longer duration for slide-in
-      useNativeDriver: true,
-      easing: Platform.OS === "ios" ? Easing.inOut(Easing.ease) : Easing.bezier(0.4, 0.0, 0.2, 1), // Different easing
-    };
+    const slideValue = visible ? 0 : Dimensions.get("window").height;
+    const opacityValue = visible ? 1 : 0;
 
-    Animated.timing(slideAnim, animationConfig).start(() => {
+    // Run slide and fade animations together
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: slideValue,
+        duration: visible ? 400 : 300,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: opacityValue,
+        duration: visible ? 400 : 300,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       if (!visible) {
-        onClose(); // Close the modal when animation ends
+        onClose(); // Close modal after hiding
       }
     });
   }, [visible]);
 
-  const sampleOptions: Option[] = [
-    { id: "opt1", name: "Extra Cheese", price: 10 },
-    { id: "opt2", name: "Spicy Sauce", price: 5 },
-    { id: "opt3", name: "Double Meat", price: 20 },
-  ];
+  useEffect(() => {
+    const optionsRef = ref(database, "OrderDetail"); // Adjust to your Firebase structure
+
+    const unsubscribe = onValue(optionsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const formattedOptions = Object.keys(data).map((key) => ({
+          id: key,
+          name: data[key].name,
+          price: data[key].price,
+          status: data[key].status,
+        }));
+        setOptions(formattedOptions);
+      }
+    });
+
+    return () => {
+      unsubscribe(); // Cleanup listener
+    };
+  }, []);
 
   const handleOptionPress = (option: Option) => {
     if (!currentProduct) return;
@@ -94,62 +127,64 @@ const OrderDetailsModal: React.FC<Props> = ({
 
   return (
     <Modal transparent={true} visible={visible} animationType="none">
-      <View style={styles.centeredView}>
-        <Animated.View
-          style={[
-            styles.modalView,
-            { transform: [{ translateY: slideAnim }] }, // Slide animation
-          ]}
-        >
-          <Text style={styles.modalText}>
-            Order Details for{" "}
-            {currentProduct?.nameDisplay || "No Product Selected"}
-          </Text>
+    <View style={styles.centeredView}>
+      <Animated.View
+        style={[
+          styles.modalView,
+          { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
+        ]}
+      >
+        <Text style={styles.modalText}>
+          Details for {currentProduct?.nameDisplay || "No Product Selected"}
+        </Text>
 
-          <View style={styles.contentContainer}>
-            <ScrollView ref={scrollViewRef} style={styles.scrollView}>
-              {sampleOptions.map((option) => {
-                const isSelected = (
-                  selectedOptions[currentProduct?.id || ""] || []
-                ).some((o) => o.name === option.name);
-                return (
-                  <OptionItem
-                    key={option.id}
-                    option={option}
-                    isSelected={isSelected}
-                    onPress={() => handleOptionPress(option)}
-                  />
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => {
-                  if (!currentProduct) return;
-                  addItemToOrder(
-                    currentProduct,
+        <View style={styles.contentContainer}>
+          <ScrollView ref={scrollViewRef} style={styles.scrollView}>
+            <View style={styles.optionsGrid}>
+              {options
+                .filter((option) => option.status !== false)
+                .map((option) => {
+                  const isSelected = (
                     selectedOptions[currentProduct?.id || ""] || []
+                  ).some((o) => o.name === option.name);
+
+                  return (
+                    <OptionItem
+                      key={option.id}
+                      option={option}
+                      isSelected={isSelected}
+                      onPress={() => handleOptionPress(option)}
+                    />
                   );
-                  onClose();
-                }}
-              >
-                <Text style={styles.addButtonText}>Add to Order</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
+                })}
             </View>
+          </ScrollView>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                if (!currentProduct) return;
+                addItemToOrder(
+                  currentProduct,
+                  selectedOptions[currentProduct?.id || ""] || []
+                );
+                onClose();
+              }}
+            >
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
-        </Animated.View>
-      </View>
-    </Modal>
+        </View>
+      </Animated.View>
+    </View>
+  </Modal>
   );
 };
 
 export default OrderDetailsModal;
-
 
 const isMobile = false;
 const { width, height } = Dimensions.get("window");
@@ -168,92 +203,116 @@ const styles = StyleSheet.create({
         width: "100%",
         height: "100%",
       },
-      centeredView: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "rgba(0, 0, 0, 0.6)",
-      },
-      modalView: {
-        width: "80%",
-        height: "65%",
-        backgroundColor: "white",
-        borderRadius: 15,
-        padding: 20,
-        alignItems: "center",
-        elevation: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-      },
-      modalText: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: "#333",
-        textAlign: "center",
-        marginBottom: 20,
-      },
-      contentContainer: {
-        flex: 1,
-        width: "100%", // Full width for the content
-        justifyContent: "space-between", // Space between ScrollView and buttons
-      },
-      scrollView: {
-        flex: 1, // Allow ScrollView to take available space
-        maxHeight: "80%",
-        width: "100%",
-      },
-      buttonContainer: {
-        flexDirection: "row",
-        justifyContent: "space-evenly", // Buttons centered with space between
-        marginTop: 10,
-        paddingBottom: 10, // Align buttons closer to the bottom
-      },
-      addButton: {
-        backgroundColor: "#2196F3",
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 25,
-        width: "40%",
-        height: 50,
-        alignItems: "center",
-        justifyContent: "center", // Center text in the button
-      },
-      addButtonText: {
-        color: "#fff",
-        fontWeight: "bold",
-        fontSize: 16,
-      },
-      closeButton: {
-        backgroundColor: "#cccccc",
-        borderRadius: 25,
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        width: "40%",
-        height: 50,
-        alignItems: "center",
-        justifyContent: "center", // Center text in the button
-      },
-      closeButtonText: {
-        color: "#333",
-        fontSize: 16,
-      },
-      gridItem: {
-        width: "100%", // Full width for the grid items
-        marginBottom: 20,
-      },    
-   
- 
-  buttonOption: {
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  modalView: {
+    width: "80%",
+    height: "65%",
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  modalText: {
+    fontFamily: "GoogleSans, Kanit",
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  contentContainer: {
+    flex: 1,
+    width: "100%", // Full width for the content
+    justifyContent: "space-between", // Space between ScrollView and buttons
+  },
+  scrollView: {
+    flex: 1, // Allow ScrollView to take available space
+    maxHeight: "80%",
+    width: "100%",
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-evenly", // Buttons centered with space between
+    marginTop: 10,
+    paddingBottom: 10, // Align buttons closer to the bottom
+  },
+  addButton: {
+    backgroundColor: "#9969c7",
     paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 25, // Rounded corners for buttons
-    borderWidth: 2,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    width: "40%",
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center", // Center text in the button
+  },
+  addButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  closeButton: {
+    backgroundColor: "#cccccc",
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    width: "40%",
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center", // Center text in the button
+  },
+  closeButtonText: {
+    color: "#333",
+    fontSize: 16,
+  },
+  optionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
+    marginVertical: 10,
+  },
+  // Styles for each button
+  gridItem: {
+    width: "45%", // Adjusts to display two buttons per row
+    marginBottom: 10,
+  },
+  buttonOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.23,
+    shadowRadius: 2.62,
+    elevation: 4,
   },
-  
+  activeButton: {
+     borderColor: "#9969c7",
+     borderWidth: 3,  
+  },
+  inactiveButton: {
+    backgroundColor: "#fff", 
+    borderColor: "transparent",
+  },
+  activeText: {
+    color: "#9969c7",
+    fontWeight: "bold",
+  },
+  inactiveText: {
+    color: "#666",
+  },
   arrowButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -261,20 +320,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0e0e0",
     borderRadius: 25,
     marginVertical: 8, // More vertical space
-  },
-  
-  activeButton: {
-    borderColor: "#6a1b9a", // Stronger color for active state
-  },
-  inactiveButton: {
-    borderColor: "lightgray",
-  },
-  activeText: {
-    color: "#6a1b9a", // Stronger active text color
-    fontSize: 16,
-  },
-  inactiveText: {
-    color: "gray",
-    fontSize: 16,
   },
 });

@@ -9,6 +9,7 @@ import Products from './products';
 import CategoryScreen from './CategoryScreen ';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
+ 
 
 const Drawer = createDrawerNavigator();
 
@@ -81,7 +82,9 @@ const DrawerLayout = () => {
         }}
         component={OrderDetail}  
       />
+       
     </Drawer.Navigator>
+    
   );
 };
 

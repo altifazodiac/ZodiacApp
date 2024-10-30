@@ -3,6 +3,7 @@ export interface Option {
     id: string;
     name: string;
     price: number;
+    status:boolean;
   }
   
   export interface Product {
@@ -11,6 +12,7 @@ export interface Option {
     price: string;
     imageUrl?: string | null;
     description?: string;
+    productSize: string;
     categoryId: string;
     status: string;
     options?: Option[];
