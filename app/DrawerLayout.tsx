@@ -9,6 +9,7 @@ import Products from './products';
 import CategoryScreen from './CategoryScreen ';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
+import Setting from './Setting';
  
 
 const Drawer = createDrawerNavigator();
@@ -82,7 +83,16 @@ const DrawerLayout = () => {
         }}
         component={OrderDetail}  
       />
-       
+       <Drawer.Screen
+        name="Setting"
+        options={{
+          title: 'Setting',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} color={color} size={24} />
+          ),
+        }}
+        component={Setting}  
+      />
     </Drawer.Navigator>
     
   );

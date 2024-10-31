@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useContext,
+} from "react";
 import {
   View,
   Text,
@@ -15,16 +21,16 @@ import {
   Alert,
 } from "react-native";
 import { db, ref, onValue } from "./firebase";
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
 import { Swipeable } from "react-native-gesture-handler";
 import { database } from "../app/firebase";
-import { get, set } from "firebase/database";
-import AntDesign from '@expo/vector-icons/AntDesign';
-
+import { DatabaseReference, get, set } from "firebase/database";
+import AntDesign from "@expo/vector-icons/AntDesign";
+import { Settings } from "../Data/types"; // Adjust the path as needed
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
 const isMobile = windowWidth <= 768;
@@ -406,14 +412,7 @@ const Orders = () => {
       setIsDrawerOpen((previousState) => !previousState);
     });
   };
-  const subtotal = orderItems.reduce(
-    (sum, item) =>
-      sum +
-      item.quantity *
-        (parseFloat(item.product.price) +
-          item.selectedOptions.reduce((sum, option) => sum + option.price, 0)),
-    0
-  );
+
   const confirmClearOrderItems = () => {
     Alert.alert(
       "Confirm Delete",
@@ -431,9 +430,6 @@ const Orders = () => {
       { cancelable: true }
     );
   };
-  //const discount = subtotal > 50 ? 5 : 0;
-  const discount = 0;
-  const total = subtotal - discount;
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const orderItem = orderItems.find(
@@ -573,6 +569,36 @@ const Orders = () => {
       }
     },
   });
+  const [settings, setSettings] = useState<Settings | null>();
+  // 2. Then calculate subtotal
+  const subtotal = orderItems.reduce(
+    (sum, item) =>
+      sum +
+      item.quantity *
+        (parseFloat(item.product.price) +
+          item.selectedOptions.reduce((sum, option) => sum + option.price, 0)),
+    0
+  );
+
+  const discount = settings?.OrderPanels.discountValue || 0;
+const tax = subtotal * (settings?.OrderPanels.taxValue || 0);
+const serviceCharge = subtotal * (settings?.OrderPanels.ServiceChargeValue || 0);
+const total = subtotal - discount + tax + serviceCharge;
+
+  useEffect(() => {
+    const settingsRef: DatabaseReference = ref(database, "settings");
+
+    const unsubscribe = onValue(settingsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.OrderPanels) {
+        setSettings(data as Settings);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [database]);
 
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
@@ -737,31 +763,35 @@ const Orders = () => {
         >
           <View style={styles.orderSummaryContainer}>
             <Text
-              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}>
+              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
+            >
               Order Summary
             </Text>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                
                 <Text style={styles.orderHeaderText}>
                   {" "}
                   Receipt No.{receiptNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-              
                 <Text style={styles.orderHeaderText}>
                   {" "}
                   Queue No. #{queueNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
-                <AntDesign name="printer" size={16} color="black" />
+                <TouchableOpacity
+                  style={[styles.circleButton, { marginRight: 5 }]}
+                >
+                  <AntDesign name="printer" size={16} color="black" />
                 </TouchableOpacity>
-               
-                <TouchableOpacity style={ styles.circleButton} onPress={confirmClearOrderItems}>
-                <Ionicons name="trash-outline" size={16} color="#E21818" />
+
+                <TouchableOpacity
+                  style={styles.circleButton}
+                  onPress={confirmClearOrderItems}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#E21818" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -852,7 +882,10 @@ const Orders = () => {
                     <View key={index} style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
                         <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                        {item.product.nameDisplay} {item.product.productSize ? ` (${item.product.productSize})` : ""}
+                          {item.product.nameDisplay}{" "}
+                          {item.product.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
                         </Text>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
@@ -928,14 +961,40 @@ const Orders = () => {
                   {subtotal.toFixed(0)}฿
                 </Text>
               </View>
-              <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Discount:</Text>
-                <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
-                >
-                  {discount.toFixed(0)}฿
-                </Text>
-              </View>
+              {settings?.OrderPanels.displayDiscount && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans" }}>Discount:</Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {discount.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+              {settings?.OrderPanels.displayTax && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans" }}>
+                    Tax ({(settings?.OrderPanels.taxValue * 100).toFixed(0)}%):
+                  </Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {tax.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+            {settings?.OrderPanels.displayServiceCharge && (
+    <View style={styles.orderTotalRow}>
+        <Text style={{ fontFamily: "GoogleSans" }}>
+            Service Charge ({(settings?.OrderPanels.ServiceChargeValue * 100).toFixed(0)}%):
+        </Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {serviceCharge.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -978,26 +1037,29 @@ const Orders = () => {
             </Text>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                
                 <Text style={styles.orderHeaderText}>
                   {" "}
                   Receipt No.{receiptNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-               
                 <Text style={styles.orderHeaderText}>
                   {" "}
                   Queue: #{queueNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
-                <AntDesign name="printer" size={16} color="black" />
+                <TouchableOpacity
+                  style={[styles.circleButton, { marginRight: 5 }]}
+                >
+                  <AntDesign name="printer" size={16} color="black" />
                 </TouchableOpacity>
-               
-                <TouchableOpacity style={ styles.circleButton} onPress={confirmClearOrderItems}>
-                <Ionicons name="trash-outline" size={16} color="#E21818" />
+
+                <TouchableOpacity
+                  style={styles.circleButton}
+                  onPress={confirmClearOrderItems}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#E21818" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1089,7 +1151,10 @@ const Orders = () => {
                     <View style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
                         <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                        {item.product.nameDisplay}{item.product.productSize ? ` (${item.product.productSize})` : ""}
+                          {item.product.nameDisplay}
+                          {item.product.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
                         </Text>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
@@ -1165,14 +1230,40 @@ const Orders = () => {
                   {subtotal.toFixed(0)}฿
                 </Text>
               </View>
-              <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Discount:</Text>
-                <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
-                >
-                  {discount.toFixed(0)}฿
-                </Text>
-              </View>
+              {settings?.OrderPanels.displayDiscount && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans" }}>Discount:</Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {discount.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+              {settings?.OrderPanels.displayTax && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans" }}>
+                    Tax ({(settings?.OrderPanels.taxValue * 100).toFixed(0)}%):
+                  </Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {tax.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+             {settings?.OrderPanels.displayServiceCharge && (
+    <View style={styles.orderTotalRow}>
+        <Text style={{ fontFamily: "GoogleSans" }}>
+            Service Charge ({(settings?.OrderPanels.ServiceChargeValue * 100).toFixed(0)}%): 
+        </Text>
+                  <Text
+                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                  >
+                    {serviceCharge.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -1550,7 +1641,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
- 
+
   buttonHeader: {
     alignItems: "center",
     justifyContent: "center",
@@ -1559,7 +1650,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    
+
     elevation: 3,
     borderWidth: 2,
     borderColor: "transparent", // Default border color
@@ -1580,7 +1671,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
     borderRadius: 50,
-    padding:5,
+    padding: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
