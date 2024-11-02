@@ -10,6 +10,7 @@ import CategoryScreen from './CategoryScreen ';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
 import Setting from './Setting';
+import MemberRegister from './MemberRegister';
  
 
 const Drawer = createDrawerNavigator();
@@ -92,6 +93,16 @@ const DrawerLayout = () => {
           ),
         }}
         component={Setting}  
+      />
+       <Drawer.Screen
+        name="MemberRegister"
+        options={{
+          title: 'MemberRegister',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'log-in' : 'log-in-outline'} color={color} size={24} />
+          ),
+        }}
+        component={MemberRegister}  
       />
     </Drawer.Navigator>
     

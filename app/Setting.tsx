@@ -12,6 +12,9 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  TouchableOpacity,
+  Modal,
+  SafeAreaView,
 } from "react-native";
 import { database } from "./firebase";
 import { onValue, ref, set } from "firebase/database";
@@ -42,6 +45,7 @@ type FormState = {
     taxValue: number;
     largeimage: boolean;
     ordersListPaper: boolean;
+    isPercentage?: boolean;
   };
   advancedPanels: {
     customFields: boolean;
@@ -84,6 +88,7 @@ const initialFormState: FormState = {
     serviceChargeValue: 0,
     largeimage: false,
     ordersListPaper: false,
+    isPercentage: false,
   },
   advancedPanels: {
     customFields: false,
@@ -141,8 +146,6 @@ const FormProvider: React.FC<FormProviderProps> = ({ children }) => {
         },
       }));
       addToDatabase(panel, String(option), numericValue);
-    } else {
-      console.warn(`Invalid value for ${panel}.${String(option)}:`, value);
     }
   };
 
@@ -170,25 +173,41 @@ const addToDatabase = (
 };
 
 // OrderSettings component
-const OrderSettings: React.FC<OrderSettingsProps> = ({
-  isPercentage,
-  setIsPercentage,
-}) => {
-  const context = useContext(FormContext);
+const OrderSettings: React.FC<{
+  isPercentage: boolean;
+  setIsPercentage: React.Dispatch<React.SetStateAction<boolean>>;
+}> = ({ isPercentage, setIsPercentage }) => {
+  const { formState, toggleOption, handleValueChange } =
+    useContext(FormContext)!;
   const [selectedValue, setSelectedValue] = useState<number | string>("");
-  const { formState, toggleOption, handleValueChange } = context!;
+  const [selectedServiceCharge, setSelectedServiceCharge] = useState<
+    number | string
+  >("");
+  const [taxModalVisible, setTaxModalVisible] = useState(false);
+  const [serviceChargeModalVisible, setServiceChargeModalVisible] =
+    useState(false);
 
   useEffect(() => {
-    
-    handleValueChange("OrderPanels", "taxValue", String(selectedValue));
+    if (formState.OrderPanels.displayTax) {
+      handleValueChange("OrderPanels", "taxValue", String(selectedValue));
+    }
   }, [selectedValue]);
 
+  useEffect(() => {
+    handleValueChange(
+      "OrderPanels",
+      "serviceChargeValue",
+      String(selectedServiceCharge)
+    );
+  }, [selectedServiceCharge]);
+  
   const handleTaxValueChange = (value: number) => {
     const newValue = isPercentage ? value / 100 : value;
     if (!isNaN(newValue)) {
       handleValueChange("OrderPanels", "taxValue", String(newValue));
     }
   };
+
   const handleServiceChargeChange = (value: number) => {
     const newValue = isPercentage ? value / 100 : value;
     if (!isNaN(newValue)) {
@@ -201,114 +220,210 @@ const OrderSettings: React.FC<OrderSettingsProps> = ({
       <Picker.Item key={i} label={`${i}%`} value={i / 100} />
     ));
   };
+  
+  const toggleSwitch = () => {
+    const newIsPercentage = !isPercentage;
+    setIsPercentage(newIsPercentage);
+  
+    // Update in local state
+    handleValueChange("OrderPanels", "isPercentage", newIsPercentage ? "1" : "0");
+  
+    // Update in Firebase
+    addToDatabase("OrderPanels", "isPercentage", newIsPercentage);
+  };
+
+  // Toggle the modal when the service charge Switch is turned on
+  const handleServiceChargeToggle = () => {
+    toggleOption("OrderPanels", "displayServiceCharge");
+    setServiceChargeModalVisible(!formState.OrderPanels.displayServiceCharge);
+  };
+  const handleTaxToggle = () => {
+    toggleOption("OrderPanels", "displayTax");
+    setTaxModalVisible(!formState.OrderPanels.displayTax);
+  };
+
+  // Sync selectedServiceCharge state with formState
+  useEffect(() => {
+    setSelectedServiceCharge(formState.OrderPanels.serviceChargeValue);
+  }, [formState.OrderPanels.serviceChargeValue]);
 
   return (
     <View style={styles.container}>
       <ScrollView>
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Order Setting</Text>
-
-          <View style={styles.option}>
-            <Text>Display Size</Text>
-            <Switch
-              value={formState.OrderPanels.displaySize}
-              onValueChange={() => toggleOption("OrderPanels", "displaySize")}
-            />
-          </View>
-
-          <View style={styles.option}>
-            <Text>Display Discount</Text>
-            <Switch
-              value={formState.OrderPanels.displayDiscount}
-              onValueChange={() =>
-                toggleOption("OrderPanels", "displayDiscount")
-              }
-            />
-          </View>
-          {formState.OrderPanels.displayDiscount && (
+          <View style={styles.underlinedGroup}>
             <View style={styles.option}>
-              <Text style={styles.optionLabel}>Discount Value</Text>
+              <Text>Display Size</Text>
+              <Switch
+                value={formState.OrderPanels.displaySize}
+                onValueChange={() => toggleOption("OrderPanels", "displaySize")}
+              />
+            </View>
+          </View>
+          <View style={styles.underlinedGroup}>
+            <View style={styles.option}>
+              <Text>Display Discount</Text>
+              <Switch
+                value={formState.OrderPanels.displayDiscount}
+                onValueChange={() =>
+                  toggleOption("OrderPanels", "displayDiscount")
+                }
+              />
+            </View>
+            {formState.OrderPanels.displayDiscount && (
+              <View style={styles.underlinedGroup}>
+                <View style={styles.option}>
+                  <Text style={styles.optionLabel}>
+                    Discount Value {isPercentage ? "Percentage (%)" : "Amount (฿)"}
+                  </Text>
+                  <View style={styles.discountContainer}>
+                    <TextInput
+                      style={styles.discountInput}
+                      keyboardType="numeric"
+                      value={(
+                        formState.OrderPanels.discountValue ?? 0
+                      ).toString()}
+                      onChangeText={(value) =>
+                        handleValueChange("OrderPanels", "discountValue", value)
+                      }
+                      placeholder="Enter discount"
+                      placeholderTextColor="#888"
+                    />
+                     
+                    <TouchableOpacity
+                      style={styles.switchContainer}
+                      onPress={toggleSwitch}
+                    >
+                      <View
+                        style={[
+                          styles.switchBackground,
+                          isPercentage ? styles.rightActive : styles.leftActive,
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.label,
+                          !isPercentage && styles.activeLabel,
+                        ]}
+                      >
+                        ฿
+                      </Text>
+                      <Text
+                        style={[
+                          styles.label,
+                          isPercentage && styles.activeLabel,
+                        ]}
+                      >
+                        %
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+           <View style={styles.underlinedGroup}>
+            <View style={styles.option}>
+            <Text>Display Tax  {`(${(formState.OrderPanels.taxValue * 100).toFixed(0)}%)`}</Text>
               <View style={styles.discountContainer}>
                 <TextInput
-                  style={styles.discountInput}
-                  keyboardType="numeric"
-                  value={(formState.OrderPanels.discountValue ?? 0).toString()}
-                  onChangeText={(value) =>
-                    handleValueChange("OrderPanels", "discountValue", value)
-                  }
-                  placeholder="Enter discount"
-                  placeholderTextColor="#888"
+                   style={[styles.Input,{width:0}]}
+                  value={formState.OrderPanels.taxValue.toString()}
+                  readOnly={!formState.OrderPanels.displayTax}
+                 
                 />
-                <Text style={styles.unitLabel}>{isPercentage ? "%" : "฿"}</Text>
                 <Switch
-                  value={isPercentage}
-                  onValueChange={setIsPercentage}
-                  trackColor={{ false: "#9969c7", true: "#4CAF50" }}
-                  thumbColor={isPercentage ? "#FFEB3B" : "#f4f3f4"}
+                  value={formState.OrderPanels.displayTax}
+                  onValueChange={handleTaxToggle}
                 />
-                
               </View>
             </View>
-          )}
-
-          <View style={styles.option}>
-            <Text>Display Tax</Text>
-            <Switch
-              value={formState.OrderPanels.displayTax}
-              onValueChange={() => toggleOption("OrderPanels", "displayTax")}
-            />
-          </View>
-          {formState.OrderPanels.displayTax && (
-            <View style={styles.option}>
-              <Text>Tax Value (%)</Text>
+            <Modal
+          transparent={true}
+          visible={taxModalVisible}
+          animationType="slide"
+          onRequestClose={() => setTaxModalVisible(false)}
+        >
+          <SafeAreaView style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Set Tax Value</Text>
               <Picker
                 selectedValue={formState.OrderPanels.taxValue}
                 style={styles.dropdown}
-                onValueChange={(itemValue) => handleTaxValueChange(Number(itemValue))}
-              >
-                {generateDropdownItems()}
-              </Picker>
-            </View>
-          )}
-        <View style={styles.option}>
-            <Text>Display Service Charge</Text>
-            <Switch
-              value={formState.OrderPanels.displayServiceCharge}
-              onValueChange={() =>
-                toggleOption("OrderPanels", "displayServiceCharge")
-              }
-            />
-          </View>
-          {formState.OrderPanels.displayServiceCharge && (
-            <View style={styles.option}>
-              <Text>Service Charge (%)</Text>
-              <Picker
-                selectedValue={formState.OrderPanels.serviceChargeValue}
-                style={styles.dropdown}
                 onValueChange={(itemValue) =>
-                  handleServiceChargeChange(Number(itemValue)) 
+                  handleTaxValueChange(Number(itemValue))
                 }
               >
                 {generateDropdownItems()}
               </Picker>
+              <TouchableOpacity onPress={() => setTaxModalVisible(false)}>
+                <Text style={styles.closeButton}>Close</Text>
+              </TouchableOpacity>
             </View>
-          )}
-          <View style={styles.option}>
-            <Text>Large image</Text>
-            <Switch
-              value={formState.OrderPanels.largeimage}
-              onValueChange={() => toggleOption("OrderPanels", "largeimage")}
-            />
+          </SafeAreaView>
+        </Modal>
           </View>
-
-          <View style={styles.option}>
-            <Text>Orders List Paper</Text>
-            <Switch
-              value={formState.OrderPanels.ordersListPaper}
-              onValueChange={() =>
-                toggleOption("OrderPanels", "ordersListPaper")
-              }
-            />
+          <View style={styles.underlinedGroup}>
+            <View style={styles.option}>
+              <Text>Display Service Charge  {`(${(formState.OrderPanels.serviceChargeValue * 100).toFixed(0)}%)`}</Text>
+              <View style={styles.discountContainer}>
+                <TextInput
+                  style={[styles.Input,{width:0}]}
+                  value={formState.OrderPanels.serviceChargeValue.toString()}
+                  readOnly={!formState.OrderPanels.displayServiceCharge}
+                  
+                />
+                <Switch
+                  value={formState.OrderPanels.displayServiceCharge}
+                  onValueChange={handleServiceChargeToggle}
+                />
+              </View>
+            </View>
+            <Modal
+          transparent={true}
+          visible={serviceChargeModalVisible}
+          animationType="slide"
+          onRequestClose={() => setServiceChargeModalVisible(false)}
+        >
+          <SafeAreaView style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Set Service Charge</Text>
+              <Picker
+                selectedValue={formState.OrderPanels.serviceChargeValue}
+                style={styles.dropdown}
+                onValueChange={(itemValue) =>
+                  handleServiceChargeChange(Number(itemValue))
+                }
+              >
+                {generateDropdownItems()}
+              </Picker>
+              <TouchableOpacity onPress={() => setServiceChargeModalVisible(false)}>
+                <Text style={styles.closeButton}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </Modal>
+          </View>
+          <View style={styles.underlinedGroup}>
+            <View style={styles.option}>
+              <Text>Large image</Text>
+              <Switch
+                value={formState.OrderPanels.largeimage}
+                onValueChange={() => toggleOption("OrderPanels", "largeimage")}
+              />
+            </View>
+          </View>
+          <View style={styles.underlinedGroup}>
+            <View style={styles.option}>
+              <Text>Orders List Paper</Text>
+              <Switch
+                value={formState.OrderPanels.ordersListPaper}
+                onValueChange={() =>
+                  toggleOption("OrderPanels", "ordersListPaper")
+                }
+              />
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -331,7 +446,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
   },
   panelTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "bold",
     marginBottom: 10,
     color: "#6a1b9a",
@@ -345,21 +460,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: "5%",
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 5,
-    width: 80,
-    textAlign: "center",
-    borderRadius: 20,
+
   },
-  dropdown: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 20,
-    padding: 5,
-    width: 80,
-    textAlign: "center",
-  },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -371,24 +474,118 @@ const styles = StyleSheet.create({
   },
   discountContainer: {
     flexDirection: "row",
-    alignItems: "center",
+  },
+  Input:{
+    fontSize: 14,
+    paddingHorizontal: 10,
+    backgroundColor: "#fff",
   },
   discountInput: {
-    flex: 1,
     fontSize: 14,
     paddingHorizontal: 10,
     backgroundColor: "#fff",
     borderColor: "#ccc",
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 20,
     marginRight: 10,
-    width: 80,
+    width: 100,
     textAlign: "center",
   },
+
+  underlinedGroup: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#eeeeee",
+    marginTop: 10,
+  },
+  switchContainer: {
+    flexDirection: "row",
+    width: 60,
+    height: 30,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f0f0f0",
+    position: "relative",
+  },
+  switchBackground: {
+    position: "absolute",
+    width: "50%",
+    height: "100%",
+    backgroundColor: "#9969c7",
+    borderRadius: 20,
+  },
+  leftActive: {
+    left: 0,
+  },
+  rightActive: {
+    right: 0,
+  },
+  label: {
+    fontFamily: "GoogleSans",
+    flex: 1,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#888",
+    zIndex: 1,
+  },
+  activeLabel: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   unitLabel: {
-    fontSize: 16,
+    fontFamily: "GoogleSans",
+    fontWeight: "800",
+    fontSize: 14,
     color: "#666",
-    marginRight: 8,
+    marginTop: 5,
+    marginRight: 22,
+  },
+
+  dropdown: {
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 20,
+    padding: 5,
+    fontSize: 14,
+    width: 150,
+    textAlign: "center",
+    backgroundColor: "#fff",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: 250,
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+  closeButton: {
+     width:100,
+     fontFamily: "GoogleSans",
+     fontSize: 16,
+     color: "#fff",
+     fontWeight: "bold",
+     marginBottom: 10,
+   height: 30,
+     backgroundColor: "#9969c7",
+     borderRadius: 20,
+     paddingVertical: 5,
+  marginTop: 15,
+  textAlign: "center",
+     
   },
 });
 const Setting: React.FC = () => {
@@ -405,4 +602,4 @@ const Setting: React.FC = () => {
   );
 };
 
-export default Setting; // Ensure Setting is the default export
+export default Setting; 

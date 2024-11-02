@@ -580,20 +580,38 @@ const Orders = () => {
     0
   );
 
-  const discount = settings?.OrderPanels.discountValue || 0;
-const tax = subtotal * (settings?.OrderPanels.taxValue || 0);
-const serviceCharge = subtotal * (settings?.OrderPanels.ServiceChargeValue || 0);
+  const discount = settings?.OrderPanels.displayDiscount
+  ? (settings?.OrderPanels.isPercentage 
+      ? (settings?.OrderPanels.discountValue || 0) / 100 * subtotal // Calculate discount as a percentage of subtotal
+      : settings?.OrderPanels.discountValue || 0) // Keep as amount
+  : 0;
+
+// Calculate tax based on settings
+const tax = settings?.OrderPanels.displayTax
+  ? subtotal * (settings?.OrderPanels.taxValue || 0) // Assuming taxValue is a decimal
+  : 0;
+
+// Calculate service charge based on settings
+const serviceCharge = settings?.OrderPanels.displayServiceCharge
+  ? subtotal * (settings?.OrderPanels.serviceChargeValue || 0) // Assuming serviceChargeValue is a decimal
+  : 0;
+
+// Calculate the total amount
 const total = subtotal - discount + tax + serviceCharge;
 
+
+const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount.toFixed(0)}฿`;
   useEffect(() => {
     const settingsRef: DatabaseReference = ref(database, "settings");
 
     const unsubscribe = onValue(settingsRef, (snapshot) => {
       const data = snapshot.val();
+      console.log("Settings data:", data); // Log the data
       if (data && data.OrderPanels) {
         setSettings(data as Settings);
       }
     });
+  
 
     return () => {
       unsubscribe();
@@ -963,11 +981,11 @@ const total = subtotal - discount + tax + serviceCharge;
               </View>
               {settings?.OrderPanels.displayDiscount && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>Discount:</Text>
+                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7"  }}>Discount:</Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                    style={{ fontFamily: "GoogleSans", textAlign: "right", color: "#9969c7" }}
                   >
-                    {discount.toFixed(0)}฿
+                   {discountValue}
                   </Text>
                 </View>
               )}
@@ -983,18 +1001,20 @@ const total = subtotal - discount + tax + serviceCharge;
                   </Text>
                 </View>
               )}
-            {settings?.OrderPanels.displayServiceCharge && (
-    <View style={styles.orderTotalRow}>
+          {settings ? ( // Check if settings is not null
+    settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
+      <View style={styles.orderTotalRow}>
         <Text style={{ fontFamily: "GoogleSans" }}>
-            Service Charge ({(settings?.OrderPanels.ServiceChargeValue * 100).toFixed(0)}%):
+          Service Charge ({(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}%): 
         </Text>
-                  <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
-                  >
-                    {serviceCharge.toFixed(0)}฿
-                  </Text>
-                </View>
-              )}
+        <Text style={{ fontFamily: "GoogleSans", textAlign: "right" }}>
+          {serviceCharge.toFixed(0)}฿ 
+        </Text>
+      </View>
+    )
+  ) : (
+    <Text>Loading settings...</Text> // Optional: Display a loading message
+  )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -1232,11 +1252,10 @@ const total = subtotal - discount + tax + serviceCharge;
               </View>
               {settings?.OrderPanels.displayDiscount && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>Discount:</Text>
+                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7"  }}>Discount:</Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
-                  >
-                    {discount.toFixed(0)}฿
+                    style={{ fontFamily: "GoogleSans", textAlign: "right", color: "#9969c7"  }}
+                  >{discountValue}
                   </Text>
                 </View>
               )}
@@ -1252,18 +1271,20 @@ const total = subtotal - discount + tax + serviceCharge;
                   </Text>
                 </View>
               )}
-             {settings?.OrderPanels.displayServiceCharge && (
-    <View style={styles.orderTotalRow}>
+            {settings ? ( // Check if settings is not null
+    settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
+      <View style={styles.orderTotalRow}>
         <Text style={{ fontFamily: "GoogleSans" }}>
-            Service Charge ({(settings?.OrderPanels.ServiceChargeValue * 100).toFixed(0)}%): 
+          Service Charge ({(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}%): 
         </Text>
-                  <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
-                  >
-                    {serviceCharge.toFixed(0)}฿
-                  </Text>
-                </View>
-              )}
+        <Text style={{ fontFamily: "GoogleSans", textAlign: "right" }}>
+          {serviceCharge.toFixed(0)}฿ 
+        </Text>
+      </View>
+    )
+  ) : (
+    <Text>Loading settings...</Text> // Optional: Display a loading message
+  )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text

@@ -39,9 +39,10 @@ export interface Option {
     displayTax: boolean;
     taxValue: number;
     displayServiceCharge: boolean;
-    ServiceChargeValue: number;
+    serviceChargeValue: number;
     largeimage: boolean;
     ordersListPaper: boolean;
     isPercentage?: boolean;  
+   
   }
  

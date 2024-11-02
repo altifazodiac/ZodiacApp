@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getStorage } from 'firebase/storage';
-import { getDatabase, ref, onValue } from 'firebase/database'; // Optional, for saving URL to Realtime DB
+import { getDatabase, ref, onValue } from 'firebase/database';
 
 // Your web app's Firebase configuration
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCoS2rHQdVeWg8gYSmma55yq9AjIKJvwxI",
   authDomain: "zodiacfirebase.firebaseapp.com",
   databaseURL: "https://zodiacfirebase-default-rtdb.asia-southeast1.firebasedatabase.app",
