@@ -21,7 +21,9 @@ export interface Option {
   export interface OrderItem {
     product: Product;
     quantity: number;
+   
     selectedOptions: Option[];
+    imageUrl?: string | null;
   }
   
   export type Category = {

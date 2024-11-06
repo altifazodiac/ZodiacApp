@@ -225,10 +225,8 @@ const OrderSettings: React.FC<{
     const newIsPercentage = !isPercentage;
     setIsPercentage(newIsPercentage);
   
-    // Update in local state
+    // Update state only within events or `useEffect`
     handleValueChange("OrderPanels", "isPercentage", newIsPercentage ? "1" : "0");
-  
-    // Update in Firebase
     addToDatabase("OrderPanels", "isPercentage", newIsPercentage);
   };
 

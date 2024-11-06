@@ -19,6 +19,7 @@ import {
   Platform,
   Vibration,
   Alert,
+  Image,
 } from "react-native";
 import { db, ref, onValue } from "./firebase";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -31,6 +32,7 @@ import { database } from "../app/firebase";
 import { DatabaseReference, get, set } from "firebase/database";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import { Settings } from "../Data/types"; // Adjust the path as needed
+import FastImage from "expo-fast-image";
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
 const isMobile = windowWidth <= 768;
@@ -42,9 +44,9 @@ const Orders = () => {
     if (width < 768) {
       return 2;
     } else if (width <= 1024) {
-      return 3;
+      return 4;
     } else {
-      return 3;
+      return 4;
     }
   };
 
@@ -581,26 +583,26 @@ const Orders = () => {
   );
 
   const discount = settings?.OrderPanels.displayDiscount
-  ? (settings?.OrderPanels.isPercentage 
-      ? (settings?.OrderPanels.discountValue || 0) / 100 * subtotal // Calculate discount as a percentage of subtotal
-      : settings?.OrderPanels.discountValue || 0) // Keep as amount
-  : 0;
+    ? settings?.OrderPanels.isPercentage
+      ? ((settings?.OrderPanels.discountValue || 0) / 100) * subtotal // Calculate discount as a percentage of subtotal
+      : settings?.OrderPanels.discountValue || 0 // Keep as amount
+    : 0;
 
-// Calculate tax based on settings
-const tax = settings?.OrderPanels.displayTax
-  ? subtotal * (settings?.OrderPanels.taxValue || 0) // Assuming taxValue is a decimal
-  : 0;
+  // Calculate tax based on settings
+  const tax = settings?.OrderPanels.displayTax
+    ? subtotal * (settings?.OrderPanels.taxValue || 0) // Assuming taxValue is a decimal
+    : 0;
 
-// Calculate service charge based on settings
-const serviceCharge = settings?.OrderPanels.displayServiceCharge
-  ? subtotal * (settings?.OrderPanels.serviceChargeValue || 0) // Assuming serviceChargeValue is a decimal
-  : 0;
+  // Calculate service charge based on settings
+  const serviceCharge = settings?.OrderPanels.displayServiceCharge
+    ? subtotal * (settings?.OrderPanels.serviceChargeValue || 0) // Assuming serviceChargeValue is a decimal
+    : 0;
 
-// Calculate the total amount
-const total = subtotal - discount + tax + serviceCharge;
+  // Calculate the total amount
+  const total = subtotal - discount + tax + serviceCharge;
 
-
-const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount.toFixed(0)}฿`;
+  const discountValue =
+    discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount.toFixed(0)}฿`;
   useEffect(() => {
     const settingsRef: DatabaseReference = ref(database, "settings");
 
@@ -611,7 +613,6 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
         setSettings(data as Settings);
       }
     });
-  
 
     return () => {
       unsubscribe();
@@ -787,13 +788,13 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
             </Text>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderText}>
+                <Text style={styles.orderHeaderReceiptText}>
                   {" "}
-                  Receipt No.{receiptNumber}
+                  #{receiptNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderText}>
+                <Text style={styles.orderHeaderReceiptText}>
                   {" "}
                   Queue No. #{queueNumber}
                 </Text>
@@ -867,7 +868,7 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                 </View>
               </View>
             </View>
-            <View style={styles.orderHeader}>
+            <View style={styles.orderHeaderTabs}>
               {["Dine In", "Take Away", "Delivery"].map((type) => (
                 <TouchableOpacity
                   key={type}
@@ -899,12 +900,15 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                   <Animated.View style={{ transform: [{ scale: animation }] }}>
                     <View key={index} style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
-                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product.nameDisplay}{" "}
-                          {item.product.productSize
-                            ? ` (${item.product.productSize})`
-                            : ""}
-                        </Text>
+                        
+                          <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                            {item.product?.nameDisplay}{" "}
+                            {settings?.OrderPanels?.displaySize &&
+                            item.product?.productSize
+                              ? ` (${item.product.productSize})`
+                              : ""}
+                          </Text>
+                        
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
                             {item.selectedOptions.map((option, idx) => (
@@ -981,11 +985,17 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
               </View>
               {settings?.OrderPanels.displayDiscount && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7"  }}>Discount:</Text>
+                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7" }}>
+                    Discount:
+                  </Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right", color: "#9969c7" }}
+                    style={{
+                      fontFamily: "GoogleSans",
+                      textAlign: "right",
+                      color: "#9969c7",
+                    }}
                   >
-                   {discountValue}
+                    {discountValue}
                   </Text>
                 </View>
               )}
@@ -1001,20 +1011,26 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                   </Text>
                 </View>
               )}
-          {settings ? ( // Check if settings is not null
-    settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
-      <View style={styles.orderTotalRow}>
-        <Text style={{ fontFamily: "GoogleSans" }}>
-          Service Charge ({(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}%): 
-        </Text>
-        <Text style={{ fontFamily: "GoogleSans", textAlign: "right" }}>
-          {serviceCharge.toFixed(0)}฿ 
-        </Text>
-      </View>
-    )
-  ) : (
-    <Text>Loading settings...</Text> // Optional: Display a loading message
-  )}
+              {settings ? ( // Check if settings is not null
+                settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>
+                      Service Charge (
+                      {(settings.OrderPanels.serviceChargeValue * 100).toFixed(
+                        0
+                      )}
+                      %):
+                    </Text>
+                    <Text
+                      style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                    >
+                      {serviceCharge.toFixed(0)}฿
+                    </Text>
+                  </View>
+                )
+              ) : (
+                <Text>Loading settings...</Text> // Optional: Display a loading message
+              )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -1057,13 +1073,13 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
             </Text>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderText}>
+                <Text style={styles.orderHeaderReceiptText}>
                   {" "}
-                  Receipt No.{receiptNumber}
+                  #{receiptNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderText}>
+                <Text style={styles.orderHeaderReceiptText}>
                   {" "}
                   Queue: #{queueNumber}
                 </Text>
@@ -1138,7 +1154,7 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                 </View>
               </View>
             </View>
-            <View style={styles.orderHeader}>
+            <View style={styles.orderHeaderTabs}>
               {["Dine In", "Take Away", "Delivery"].map((type) => (
                 <TouchableOpacity
                   key={type}
@@ -1169,33 +1185,25 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                 >
                   <Animated.View style={{ transform: [{ scale: animation }] }}>
                     <View style={styles.orderItem}>
-                      <View style={styles.orderItemTextContainer}>
-                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product.nameDisplay}
-                          {item.product.productSize
-                            ? ` (${item.product.productSize})`
-                            : ""}
-                        </Text>
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
-                              >
-                                ({option.name})
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.orderItemQuantityContainer}>
+                    <FastImage
+            source={{ uri: item.product?.imageUrl || "https://via.placeholder.com/100" }}
+            style={styles.orderItemImage}
+          />
+                     <View style={styles.orderItemTextContainer}>
+                     <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                            {item.product?.nameDisplay}{" "}
+                            {settings?.OrderPanels?.displaySize &&
+                            item.product?.productSize
+                              ? ` (${item.product.productSize})`
+                              : ""}
+                          </Text>
+                       <View style={styles.orderItemQuantityDisplayContainer}>
                         <Text
                           style={[
                             {
                               fontFamily: "GoogleSans",
-                              color: "#808080",
-                              fontSize: 16,
+                              color: "#9969c7",
+                              fontSize: 12,
                             },
                           ]}
                         >
@@ -1210,6 +1218,19 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                                 style={styles.optionPriceTextItem}
                               >
                                 (+{option.price.toFixed(0)}฿)
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                ({option.name})
                               </Text>
                             ))}
                           </View>
@@ -1252,10 +1273,17 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
               </View>
               {settings?.OrderPanels.displayDiscount && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7"  }}>Discount:</Text>
+                  <Text style={{ fontFamily: "GoogleSans", color: "#9969c7" }}>
+                    Discount:
+                  </Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right", color: "#9969c7"  }}
-                  >{discountValue}
+                    style={{
+                      fontFamily: "GoogleSans",
+                      textAlign: "right",
+                      color: "#9969c7",
+                    }}
+                  >
+                    {discountValue}
                   </Text>
                 </View>
               )}
@@ -1271,20 +1299,26 @@ const discountValue = discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount
                   </Text>
                 </View>
               )}
-            {settings ? ( // Check if settings is not null
-    settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
-      <View style={styles.orderTotalRow}>
-        <Text style={{ fontFamily: "GoogleSans" }}>
-          Service Charge ({(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}%): 
-        </Text>
-        <Text style={{ fontFamily: "GoogleSans", textAlign: "right" }}>
-          {serviceCharge.toFixed(0)}฿ 
-        </Text>
-      </View>
-    )
-  ) : (
-    <Text>Loading settings...</Text> // Optional: Display a loading message
-  )}
+              {settings ? ( // Check if settings is not null
+                settings.OrderPanels.displayServiceCharge && ( // Then check for displayServiceCharge
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>
+                      Service Charge (
+                      {(settings.OrderPanels.serviceChargeValue * 100).toFixed(
+                        0
+                      )}
+                      %):
+                    </Text>
+                    <Text
+                      style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                    >
+                      {serviceCharge.toFixed(0)}฿
+                    </Text>
+                  </View>
+                )
+              ) : (
+                <Text>Loading settings...</Text> // Optional: Display a loading message
+              )}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -1351,9 +1385,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: "#ccc",
+    paddingVertical: 4,
+    
   },
   orderItemTextContainer: {
     flex: 1,
@@ -1400,14 +1433,11 @@ const styles = StyleSheet.create({
   orderSummaryContainer: {
     height: isMobile ? "74%" : "100%",
     padding: 20,
-    backgroundColor: isMobile ? "rgba(255, 255, 255, 0.5)" : "#f7f7f7",
-    borderRadius: 15,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: "#fff",
+    
   },
   orderSummaryTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#aaaaaa",
     marginBottom: 5,
@@ -1477,7 +1507,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2.62,
     width: isMobile ? 180 : 250,
   },
-
+  orderItemQuantityDisplayContainer: {
+    flexDirection: "column",
+  },
   orderItemQuantityContainer: {
     flexDirection: "column",
     alignItems: "flex-end",
@@ -1630,6 +1662,16 @@ const styles = StyleSheet.create({
   orderItemSwipeableContainer: {
     marginBottom: 10,
   },
+  orderHeaderTabs: {
+    backgroundColor: "#eeeeee",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    marginRight: 10,
+    borderRadius: 20,
+  },
+  
   orderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1640,6 +1682,11 @@ const styles = StyleSheet.create({
   orderHeaderText: {
     color: "#444",
     fontSize: 14,
+  },
+  orderHeaderReceiptText: {
+    color: "#444",
+    fontSize: 18,
+    fontWeight: "bold",
   },
   dateText: {
     fontSize: 14,
@@ -1679,10 +1726,18 @@ const styles = StyleSheet.create({
   buttonHeaderText: {
     fontSize: 12,
     fontWeight: "bold",
-    color: "#444",
+    color: "#aaaaaa",
   },
   selectedButton: {
-    borderColor: "#6a1b9a", // Border color when selected
+    borderColor: "#fff", // Border color when selected
+    backgroundColor: "#fff",
+   shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 3,
+    borderWidth: 2,
+     
   },
   selectedText: {
     color: "#6a1b9a", // Text color when selected
@@ -1700,6 +1755,14 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 2,
     borderColor: "transparent", // Default border color
+  },
+   orderItemImage: {
+    width: 25,
+    height: 25,
+    resizeMode: 'contain',
+    marginRight: 10,
+    borderRadius: 5,
+    marginBottom: 5,
   },
 });
 
