@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Animated, TouchableWithoutFeedback, Vibration, TouchableOpacity, Dimensions } from "react-native";
+import { View, Text, StyleSheet, Animated, TouchableWithoutFeedback, Vibration, TouchableOpacity, Dimensions, Easing } from "react-native";
 import { Product, Settings } from "../Data/types";
 import { getDatabase, onValue, ref } from "firebase/database";
 import FastImage from 'expo-fast-image';
@@ -58,11 +58,20 @@ const ProductItem: React.FC<Props> = ({
   }, []);
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+    Animated.timing(scaleAnim, { 
+      toValue: 0.95, 
+      duration: 50, // Shorter duration for a quicker animation
+      useNativeDriver: true 
+    }).start();
   };
-
+  
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { 
+      toValue: 1, 
+      speed: 15,  
+      bounciness: 5, 
+      useNativeDriver: true 
+    }).start();
   };
 
   return (

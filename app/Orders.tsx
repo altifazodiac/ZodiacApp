@@ -42,14 +42,14 @@ const Orders = () => {
   const { width, height } = Dimensions.get("window");
   const calculateNumColumns = () => {
     if (width < 768) {
-      return 2;
+      return 3;
     } else if (width <= 1024) {
       return 4;
     } else {
       return 4;
     }
   };
-
+  type OrderType = 'Dine In' | 'Take Away' | 'Delivery';
   useEffect(() => {
     const onChange = () => {
       setNumColumns(calculateNumColumns());
@@ -84,21 +84,7 @@ const Orders = () => {
   const drawerOpacity = useRef(new Animated.Value(0)).current;
   const [queueNumber, setQueueNumber] = useState<number | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
-  const animateOrderItem = () => {
-    // Animates scaling of the item
-    Animated.sequence([
-      Animated.timing(animation, {
-        toValue: 1.1, // Scale up
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(animation, {
-        toValue: 1, // Scale back to normal
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+
   const isValidOption = (option: any): option is Option => {
     return (
       typeof option === "object" &&
@@ -114,11 +100,7 @@ const Orders = () => {
     }
     return [];
   };
-  const [selectedOrderType, setSelectedOrderType] = useState("Dine In");
-
-  const handleSelect = (type: string) => {
-    setSelectedOrderType(type); // Set the selected type
-  };
+  
   const [receiptNumber, setReceiptNumber] = useState("Loading...");
 
   useEffect(() => {
@@ -353,7 +335,7 @@ const Orders = () => {
     });
     return mergedOptions;
   };
-  const animation = useRef(new Animated.Value(1)).current; // Initialize useRef in component body
+
   const addItemToOrder = (product: Product, selectedOptions: Option[] = []) => {
     setOrderItems((prevOrderItems) => {
       const existingItemIndex = prevOrderItems.findIndex(
@@ -372,15 +354,44 @@ const Orders = () => {
             selectedOptions
           ),
         };
-        animateOrderItem(); // Trigger animation on update
+        animateOrderItem(existingItemIndex); // Pass the index here
         return updatedOrderItems;
       } else {
-        animateOrderItem(); // Trigger animation on new addition
+        animateOrderItem(prevOrderItems.length); // Pass the index of the new item
         return [...prevOrderItems, { product, quantity: 1, selectedOptions }];
       }
     });
   };
 
+  const animationValues = useRef(
+    orderItems.map(() => ({
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(30),
+    }))
+  ).current;
+
+  const animateOrderItem = (index: number) => {
+    const itemAnimationValues = {
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(30),
+    };
+
+    Animated.parallel([
+      Animated.timing(itemAnimationValues.opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(itemAnimationValues.translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Update the animation values for the specific item
+    animationValues[index] = itemAnimationValues;
+  };
   const removeItemFromOrder = (id: string) => {
     setOrderItems((prevOrderItems) =>
       prevOrderItems.filter((item) => item.product.id !== id)
@@ -434,14 +445,11 @@ const Orders = () => {
   };
 
   const renderProductItem = ({ item }: { item: Product }) => {
+    const handleIncreaseQuantity = () => addItemToOrder(item);
     const orderItem = orderItems.find(
       (orderItem) => orderItem.product.id === item.id
     );
-
     const itemQuantity = orderItem ? orderItem.quantity : 0;
-
-    const handleIncreaseQuantity = () => addItemToOrder(item);
-
     const handleDecreaseQuantity = () => {
       if (itemQuantity > 1) {
         setOrderItems((prevOrderItems) =>
@@ -619,16 +627,39 @@ const Orders = () => {
     };
   }, [database]);
 
+  const [selectedOrderType, setSelectedOrderType] = useState<OrderType>('Dine In');
+
+  // Create Animated.Value for the x-offset of the highlight
+  const highlightOffset = useRef(new Animated.Value(0)).current;
+
+  const handleSelect = (type: OrderType) => {
+    setSelectedOrderType(type);
+
+    
+    let targetOffset = 0;
+    if (type === 'Take Away') {
+      targetOffset = isMobile ? screenWidth *  0.26 : isTablet ? screenWidth * 0.14 : screenWidth * 0.11;  
+    } else if (type === 'Delivery') {
+      targetOffset = isMobile ? screenWidth *  0.54 : isTablet ? screenWidth * 0.29 : screenWidth * 0.22;  
+    }
+    Animated.timing(highlightOffset, {
+      toValue: targetOffset,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
     <View style={isMobile ? styles.containerMobile : styles.container}>
       {orderDetailModalVisible && (
         <OrderDetailsModal
+        addItemToOrder={addItemToOrder}
           visible={orderDetailModalVisible}
           onClose={() => setOrderDetailModalVisible(false)}
           currentProduct={currentProduct}
           selectedOptions={selectedOptions}
           setSelectedOptions={setSelectedOptions}
-          addItemToOrder={addItemToOrder}
+          
         />
       )}
       <View style={isMobile ? styles.layoutMobile : styles.layout1}>
@@ -784,7 +815,7 @@ const Orders = () => {
             <Text
               style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
             >
-              Order Summary
+              Orders
             </Text>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
@@ -869,26 +900,32 @@ const Orders = () => {
               </View>
             </View>
             <View style={styles.orderHeaderTabs}>
-              {["Dine In", "Take Away", "Delivery"].map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.buttonHeader,
-                    selectedOrderType === type && styles.selectedButton, // Apply selected style
-                  ]}
-                  onPress={() => handleSelect(type)}
-                >
-                  <Text
-                    style={[
-                      styles.buttonHeaderText,
-                      selectedOrderType === type && styles.selectedText, // Apply selected text style
-                    ]}
-                  >
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+      <Animated.View
+        style={{
+          ...styles.highlight,
+          transform: [{ translateX: highlightOffset.interpolate({
+            inputRange: [0, 100],  // Assuming max offset is 100
+            outputRange: [0, 100], // Map to percentages for responsiveness
+          }) }],
+        }}
+      />
+      {["Dine In", "Take Away", "Delivery"].map((type: string) => (
+        <TouchableOpacity
+          key={type}
+          style={styles.buttonHeader}
+          onPress={() => handleSelect(type as OrderType)}
+        >
+          <Text
+            style={[
+              styles.buttonHeaderText,
+              selectedOrderType === type && styles.selectedText,
+            ]}
+          >
+            {type}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
             <ScrollView>
               {orderItems.map((item, index) => (
                 <Swipeable
@@ -897,18 +934,24 @@ const Orders = () => {
                     rightSwipeActions(progress, dragX, item.product.id)
                   }
                 >
-                  <Animated.View style={{ transform: [{ scale: animation }] }}>
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { translateY: animationValues[index].translateY },
+                      ],
+                      opacity: animationValues[index].opacity,
+                    }}
+                  >
                     <View key={index} style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
-                        
-                          <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                            {item.product?.nameDisplay}{" "}
-                            {settings?.OrderPanels?.displaySize &&
-                            item.product?.productSize
-                              ? ` (${item.product.productSize})`
-                              : ""}
-                          </Text>
-                        
+                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                          {item.product?.nameDisplay}{" "}
+                          {settings?.OrderPanels?.displaySize &&
+                          item.product?.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
+                        </Text>
+
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
                             {item.selectedOptions.map((option, idx) => (
@@ -927,8 +970,8 @@ const Orders = () => {
                           style={[
                             {
                               fontFamily: "GoogleSans",
-                              color: "#808080",
-                              fontSize: 16,
+                              color: "purple",
+                              fontSize: 14,
                             },
                           ]}
                         >
@@ -1069,9 +1112,9 @@ const Orders = () => {
             <Text
               style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
             >
-              Order Summary
+              Orders
             </Text>
-            <View style={styles.orderHeader}>
+            <View style={styles.orderHeader} >
               <View style={styles.orderHeaderGroup}>
                 <Text style={styles.orderHeaderReceiptText}>
                   {" "}
@@ -1155,26 +1198,32 @@ const Orders = () => {
               </View>
             </View>
             <View style={styles.orderHeaderTabs}>
-              {["Dine In", "Take Away", "Delivery"].map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.buttonHeader,
-                    selectedOrderType === type && styles.selectedButton, // Apply selected style
-                  ]}
-                  onPress={() => handleSelect(type)}
-                >
-                  <Text
-                    style={[
-                      styles.buttonHeaderText,
-                      selectedOrderType === type && styles.selectedText, // Apply selected text style
-                    ]}
-                  >
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+      <Animated.View
+        style={{
+          ...styles.highlight,
+          transform: [{ translateX: highlightOffset.interpolate({
+            inputRange: [0, 100],  // Assuming max offset is 100
+            outputRange: [0, 100], // Map to percentages for responsiveness
+          }) }],
+        }}
+      />
+      {["Dine In", "Take Away", "Delivery"].map((type: string) => (
+        <TouchableOpacity
+          key={type}
+          style={styles.buttonHeader}
+          onPress={() => handleSelect(type as OrderType)}
+        >
+          <Text
+            style={[
+              styles.buttonHeaderText,
+              selectedOrderType === type && styles.selectedText,
+            ]}
+          >
+            {type}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
             <ScrollView>
               {orderItems.map((item, index) => (
                 <Swipeable
@@ -1183,46 +1232,46 @@ const Orders = () => {
                     rightSwipeActions(progress, dragX, item.product.id)
                   }
                 >
-                  <Animated.View style={{ transform: [{ scale: animation }] }}>
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { translateY: animationValues[index].translateY },
+                      ],
+                      opacity: animationValues[index].opacity,
+                    }}
+                  >
                     <View style={styles.orderItem}>
-                    <FastImage
-            source={{ uri: item.product?.imageUrl || "https://via.placeholder.com/100" }}
-            style={styles.orderItemImage}
-          />
-                     <View style={styles.orderItemTextContainer}>
-                     <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                            {item.product?.nameDisplay}{" "}
-                            {settings?.OrderPanels?.displaySize &&
-                            item.product?.productSize
-                              ? ` (${item.product.productSize})`
-                              : ""}
-                          </Text>
-                       <View style={styles.orderItemQuantityDisplayContainer}>
-                        <Text
-                          style={[
-                            {
-                              fontFamily: "GoogleSans",
-                              color: "#9969c7",
-                              fontSize: 12,
-                            },
-                          ]}
-                        >
-                          {item.quantity} x{" "}
-                          {parseFloat(item.product.price).toFixed(0)}฿
+                      <FastImage
+                        source={{
+                          uri:
+                            item.product?.imageUrl ||
+                            "https://via.placeholder.com/100",
+                        }}
+                        style={styles.orderItemImage}
+                      />
+                      <View style={styles.orderItemTextContainer}>
+                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                          {item.product?.nameDisplay}{" "}
+                          {settings?.OrderPanels?.displaySize &&
+                          item.product?.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
                         </Text>
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
-                              >
-                                (+{option.price.toFixed(0)}฿)
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                      </View>
+                        <View style={styles.orderItemQuantityDisplayContainer}>
+                          <Text
+                            style={[
+                              {
+                                fontFamily: "GoogleSans",
+                                color: "#9969c7",
+                                fontSize: 12,
+                              },
+                            ]}
+                          >
+                            {item.quantity} x{" "}
+                            {parseFloat(item.product.price).toFixed(0)}฿
+                          </Text>
+                         
+                        </View>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
                             {item.selectedOptions.map((option, idx) => (
@@ -1236,6 +1285,21 @@ const Orders = () => {
                           </View>
                         )}
                       </View>
+                      <View style={styles.priceQuantityContainer}>
+                         
+                      {item.selectedOptions.length > 0 && (
+                            <View style={styles.optionsPriceContainer}>
+                              {item.selectedOptions.map((option, idx) => (
+                                <Text
+                                  key={idx}
+                                  style={styles.optionPriceTextItem}
+                                >
+                                  (+{option.price.toFixed(0)}฿)
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                          </View>
                       <Text style={styles.orderItemPrice}>
                         {(
                           item.quantity *
@@ -1386,7 +1450,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
     paddingVertical: 4,
-    
   },
   orderItemTextContainer: {
     flex: 1,
@@ -1432,15 +1495,14 @@ const styles = StyleSheet.create({
   },
   orderSummaryContainer: {
     height: isMobile ? "74%" : "100%",
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     backgroundColor: "#fff",
-    
   },
   orderSummaryTitle: {
     fontSize: 16,
     fontWeight: "bold",
     color: "#aaaaaa",
-    marginBottom: 5,
   },
 
   optionsContainer: {
@@ -1527,7 +1589,7 @@ const styles = StyleSheet.create({
   proceedButton: {
     backgroundColor: "#9969c7",
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 25,
     alignItems: "center",
     marginTop: 20,
     elevation: 3,
@@ -1540,10 +1602,11 @@ const styles = StyleSheet.create({
   CloseButton: {
     backgroundColor: "#bbbbbb",
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 25,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 10,
     elevation: 3,
+    marginBottom: 20,
   },
   CloseButtonText: {
     color: "#fff",
@@ -1585,7 +1648,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: isMobile ? 5 : 10,
+    marginTop: isMobile ? 5 : isTablet ? 25 : 30,
+    marginRight: 14,
   },
   cardPrice: {
     fontSize: isMobile ? 16 : 18,
@@ -1658,21 +1722,10 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "bold",
   },
-
   orderItemSwipeableContainer: {
     marginBottom: 10,
   },
-  orderHeaderTabs: {
-    backgroundColor: "#eeeeee",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-    marginRight: 10,
-    borderRadius: 20,
-  },
-  
-  orderHeader: {
+ orderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1709,38 +1762,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
+  orderHeaderTabs: {
+    backgroundColor: "#eeeeee",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderRadius: 20,
+    height: 32,
+    paddingHorizontal: 5,
+    width: "100%",
+    marginBottom: 10,
+  },
   buttonHeader: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
+    backgroundColor: "transparent", 
     marginRight: 10,
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
-
-    elevation: 3,
-    borderWidth: 2,
-    borderColor: "transparent", // Default border color
+    flex: 1, // Distribute space evenly
   },
   buttonHeaderText: {
     fontSize: 12,
     fontWeight: "bold",
-    color: "#aaaaaa",
-  },
-  selectedButton: {
-    borderColor: "#fff", // Border color when selected
-    backgroundColor: "#fff",
-   shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 3,
-    borderWidth: 2,
-     
+    color: "#aaaaaa", 
   },
   selectedText: {
     color: "#6a1b9a", // Text color when selected
+  },
+  highlight: {
+    position: 'absolute',
+    height: '90%', 
+    marginLeft: 1,
+    width: '33.33%', // Adjust based on number of buttons
+    backgroundColor: '#fff', 
+    borderRadius: 20, 
+    zIndex: -1, // Place the highlight behind the buttons
   },
   circleButton: {
     alignItems: "center",
@@ -1756,14 +1814,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent", // Default border color
   },
-   orderItemImage: {
+  orderItemImage: {
     width: 25,
     height: 25,
-    resizeMode: 'contain',
+    resizeMode: "contain",
     marginRight: 10,
     borderRadius: 5,
     marginBottom: 5,
   },
+   
 });
 
 export default Orders;
