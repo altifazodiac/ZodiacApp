@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, TouchableWithoutFeedback, Vibration, 
 import { Product, Settings } from "../Data/types";
 import { getDatabase, onValue, ref } from "firebase/database";
 import FastImage from 'expo-fast-image';
+import { theme } from "../components/theme";
 
 interface Props {
   item: Product;
@@ -25,7 +26,7 @@ const ProductItem: React.FC<Props> = ({
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [settings, setSettings] = useState<Settings | null>(null);
-
+  const currentTheme = theme.light;  
   useEffect(() => {
     const db = getDatabase();
     const settingsRef = ref(db, "settings/OrderPanels/displaySize");
@@ -87,7 +88,7 @@ const ProductItem: React.FC<Props> = ({
           {
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-            borderColor: itemQuantity >= 1 ? "#9969c7" : "transparent",
+            borderColor: itemQuantity >= 1 ? "#3a5565" : "transparent",
             borderWidth: itemQuantity >= 1 ? 2 : 0,
           },
         ]}
@@ -96,10 +97,10 @@ const ProductItem: React.FC<Props> = ({
           <View
             style={[
               styles.circleSize,
-              item.productSize === "S" ? { backgroundColor: "#FFE5CC" } : item.productSize === "M" ? { backgroundColor: "#DCEFFF" } : item.productSize === "XL" ? { backgroundColor: "#E5CCFF" } :  item.productSize === "T" ? { backgroundColor: "#eeeeee" } :{ },
+              item.productSize === "S" ? { backgroundColor: "#e9f0f4" } : item.productSize === "M" ? { backgroundColor: "#dee9ee" } : item.productSize === "XL" ? { backgroundColor: "#d0dce1" } :  item.productSize === "T" ? { backgroundColor: "#eeeeee" } :{ },
             ]}
           >
-            <Text style={[styles.circleText, item.productSize === "S" ? { color: "#FF7700" } : item.productSize === "M" ? { color: "#0089FF" } : item.productSize === "XL" ? { color: "#8313CD" } : item.productSize === "T" ? { color: "#000" } : { }]}>{item.productSize}</Text>
+            <Text style={[styles.circleText,{color: currentTheme.textDarkColor}]}>{item.productSize}</Text>
           </View>
         )}
         <View style={styles.cardImageContainer}>
@@ -111,8 +112,8 @@ const ProductItem: React.FC<Props> = ({
         </View>
         <View style={styles.cardContent}>
           <View>
-            <Text style={styles.cardTitle}>{item.nameDisplay}</Text>
-            <Text style={styles.cardDescription}>{item.description}</Text>
+            <Text style={[styles.cardTitle,{ color: currentTheme.textColor }]}>{item.nameDisplay}</Text>
+            <Text style={[styles.cardDescription,{ color: currentTheme.textColor }]}>{item.description}</Text>
             <Text style={styles.cardPrice}>{item.price}฿</Text>
             <View style={styles.quantityContainer}>
               <TouchableOpacity onPress={() => { handleDecreaseQuantity(); Vibration.vibrate(); }} style={styles.quantityButton}>
@@ -138,11 +139,13 @@ const isTablet = windowWidth > 768 && windowWidth <= 1200;
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 15,
+    backgroundColor: "#fcfdfe",
+    borderRadius: 25,
+    borderColor:"#fff",
+    borderWidth: 5,
     padding: isMobile ? 6 : isTablet ? 6 : 12,
     margin: isMobile ? 6 : isTablet ? 6 : 12,
-    shadowColor: "#000",
+    shadowColor: "#3c5867",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.23,
     shadowRadius: 2.62,
@@ -159,12 +162,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: 'absolute', 
     marginTop: isMobile ? 0 : isTablet ? 0 : -12,
-    right: 10, 
+    right: 18, 
     opacity: 0.7,
     zIndex: 1, 
   },
   circleText: {
+    fontFamily: "GoogleSans",
     fontSize: 12,
+    fontWeight: "bold",
   },
   cardImageContainer: {
     width: "100%",
@@ -185,16 +190,16 @@ const styles = StyleSheet.create({
   },
  
   cardTitle: {
-    fontFamily: "Kanit, GoogleSans",
-    fontSize: isMobile ? 12 : isTablet ? 14 : 18,
-    fontWeight: "500",
+    fontFamily: "Kanit",
+    fontSize: isMobile ? 12 : isTablet ? 16 : 18,
+    
     marginTop: isMobile ? 4 : isTablet ? 4 : 8,
     textAlign: 'center',
   },
   cardDescription: {
     fontFamily: "GoogleSans",
     fontSize: isMobile ? 8 : isTablet ? 10 : 15,
-    color: "#666",
+ 
     marginTop: 1,
     textAlign: 'center',
   },
@@ -204,7 +209,7 @@ const styles = StyleSheet.create({
     fontSize: isMobile ? 14 : isTablet ? 18 : 20,
     fontWeight: "bold",
     textAlign: 'center',
-    color: "purple",
+    color: "#3a5665",
     margin: isMobile ? 3 : isTablet ? 5 : 6,
   },
   quantityContainer: {
@@ -234,7 +239,7 @@ const styles = StyleSheet.create({
   
   },
   quantityButtonleft: {
-    backgroundColor: '#9969c7', 
+    backgroundColor: '#3a5565', 
     borderRadius: 50,
     width: isMobile? 20 : isTablet? 25 : 42,
     

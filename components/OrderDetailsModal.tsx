@@ -15,6 +15,7 @@ import { AntDesign } from "@expo/vector-icons";
 import { Option, Product } from "../Data/types";
 import { ref, onValue } from "firebase/database";
 import { database } from "../app/firebase";
+import PhoneDialerModal from './PhoneDialerModal';  
 
 interface Props {
   visible: boolean;
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10, // Align buttons closer to the bottom
   },
   addButton: {
-    backgroundColor: "#9969c7",
+    backgroundColor: "#3a5565",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 25,
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   activeButton: {
-     borderColor: "#9969c7",
+     borderColor: "#3a5565",
      borderWidth: 3,  
   },
   inactiveButton: {
@@ -307,7 +308,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   activeText: {
-    color: "#9969c7",
+    color: "#3a5565",
     fontWeight: "bold",
   },
   inactiveText: {
