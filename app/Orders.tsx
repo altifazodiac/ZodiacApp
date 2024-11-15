@@ -37,6 +37,8 @@ import PhoneDialerModal from "../components/PhoneDialerModal";
 import PaymentMethodSelector from "../components/PaymentMethodSelector";
 import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
+import { curry } from "lodash";
+declare const window: any;
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
 const isMobile = windowWidth <= 768;
@@ -448,9 +450,11 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
       setIsDrawerOpen((previousState) => !previousState);
     });
   };
+ 
+
 
   const confirmClearOrderItems = () => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
       const isConfirmed = window.confirm("Are you sure you want to clear all items?");
       if (isConfirmed) {
         clearOrderState(); // Reset state for web
@@ -526,12 +530,26 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
 
     return (
       <Animated.View style={{ transform: [{ scale }] }}>
+        <View style={styles.rightActionContainer}>
         <TouchableOpacity
-          style={styles.rightAction}
+          style={[styles.rightAction, currentTheme.button]}
           onPress={() => removeItemFromOrder(productId)}
         >
-          <Text style={styles.actionText}>Remove</Text>
+          <Text style={[styles.actionText,{color:"white"}]}>Add Note</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.rightAction, currentTheme.button]}
+          onPress={() => removeItemFromOrder(productId)}
+        >
+          <Text style={[styles.actionText,{color:"white"}]}>Dicount</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.rightAction, {backgroundColor:"#FF0000"}]}
+          onPress={() => removeItemFromOrder(productId)}
+        >
+          <Text style={[styles.actionText,{color:"white"}]}>Remove</Text>
+        </TouchableOpacity>
+        </View>
       </Animated.View>
     );
   };
@@ -2012,14 +2030,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 80,
-    backgroundColor: "red",
     padding: 10,
-    height: "100%",
-    borderRadius: 6,
+    height: "80%",
+    borderRadius: 20,
+    marginLeft: 10,
+    marginVertical: 5,
   },
   actionText: {
-    color: "white",
-    fontWeight: "bold",
+    fontFamily: "GoogleSans",
+    fontSize: 12,
+   
   },
   orderItemSwipeableContainer: {
     marginBottom: 10,
@@ -2122,7 +2142,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 5,
   },
-  Icon: {
+  rightActionContainer: {
+    flexDirection: "row",
   }
 });
 
