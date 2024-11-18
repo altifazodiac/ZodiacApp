@@ -27,7 +27,7 @@ import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
-import { Swipeable } from "react-native-gesture-handler";
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { database } from "../app/firebase";
 import { DatabaseReference, get, set } from "firebase/database";
 import AntDesign from "@expo/vector-icons/AntDesign";
@@ -38,6 +38,7 @@ import PaymentMethodSelector from "../components/PaymentMethodSelector";
 import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
 import { curry } from "lodash";
+import EditNoteModal from "../components/EditNoteModal";
 declare const window: any;
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -91,19 +92,22 @@ const Orders = () => {
   const [queueNumber, setQueueNumber] = useState<number | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   const [isDialerVisible, setDialerVisible] = useState(false);
-const [moneyChanged, setMoneyChanged] = useState(0);
-const [cashChange, setCashChange] = useState(0);
+  const [moneyChanged, setMoneyChanged] = useState(0);
+  const [cashChange, setCashChange] = useState(0);
 
-const handleOpenDialer = () => setDialerVisible(true);
-const handleCloseDialer = () => setDialerVisible(false);
-const handleMoneyChanged = (value: number) => setMoneyChanged(value);
-const handleCashChanged = (newCashValue: number) => {
-  setCashChange(newCashValue); // Update cashChange in Orders.tsx
-};
- const [isQrDialerVisible, setQrIsDialerVisible] = useState(false);
-const [isQRModalVisible, setQRModalVisible] = useState(false);
- const mobileNumber = "0812345678"; // Replace with customer mobile number
+  const handleOpenDialer = () => setDialerVisible(true);
+  const handleCloseDialer = () => setDialerVisible(false);
+  const handleMoneyChanged = (value: number) => setMoneyChanged(value);
+  const handleCashChanged = (newCashValue: number) => {
+    setCashChange(newCashValue); // Update cashChange in Orders.tsx
+  };
+  const [isQrDialerVisible, setQrIsDialerVisible] = useState(false);
+  const [isQRModalVisible, setQRModalVisible] = useState(false);
+  const mobileNumber = "0812345678"; // Replace with customer mobile number
 
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingOrderIndex, setEditingOrderIndex] = useState<number | null>(null);
+  const [customInputText, setCustomInputText] = useState('');
   const openQRCodeModal = () => setQRModalVisible(true); // For showing PromptPay QR modal
   const closeQRCodeModal = () => setQRModalVisible(false);
   const handleQrOpenDialer = () => {
@@ -353,7 +357,10 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
         (mergedOption) => mergedOption.id === option.id
       );
       if (existingOptionIndex !== -1) {
-        mergedOptions[existingOptionIndex] = option;
+        mergedOptions[existingOptionIndex] = {
+          ...mergedOptions[existingOptionIndex],
+          ...option, // Update with new attributes
+        };
       } else {
         mergedOptions.push(option);
       }
@@ -361,16 +368,20 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
     return mergedOptions;
   };
 
-  const addItemToOrder = (product: Product, selectedOptions: Option[] = []) => {
+  const addItemToOrder = (
+    product: Product,
+    selectedOptions: Option[] = [],
+    customInput: string = ""
+  ) => {
     setOrderItems((prevOrderItems) => {
       const existingItemIndex = prevOrderItems.findIndex(
         (item) => item.product.id === product.id
       );
-
+  
       if (existingItemIndex !== -1) {
         const updatedOrderItems = [...prevOrderItems];
         const existingItem = updatedOrderItems[existingItemIndex];
-
+  
         updatedOrderItems[existingItemIndex] = {
           ...existingItem,
           quantity: existingItem.quantity + 1,
@@ -378,12 +389,16 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
             existingItem.selectedOptions,
             selectedOptions
           ),
+          customInput: customInput || existingItem.customInput, // Preserve or update customInput
         };
-        animateOrderItem(existingItemIndex); // Pass the index here
+        animateOrderItem(existingItemIndex); // Pass product name for animation
         return updatedOrderItems;
       } else {
-        animateOrderItem(prevOrderItems.length); // Pass the index of the new item
-        return [...prevOrderItems, { product, quantity: 1, selectedOptions }];
+        animateOrderItem(prevOrderItems.length); // Pass product name for animation
+        return [
+          ...prevOrderItems,
+          { product, quantity: 1, selectedOptions, customInput }, // Add new item with customInput
+        ];
       }
     });
   };
@@ -450,29 +465,33 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
       setIsDrawerOpen((previousState) => !previousState);
     });
   };
- 
-
 
   const confirmClearOrderItems = () => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
-      const isConfirmed = window.confirm("Are you sure you want to clear all items?");
+      const isConfirmed = window.confirm(
+        "Are you sure you want to clear all items?"
+      );
       if (isConfirmed) {
         clearOrderState(); // Reset state for web
       }
     } else {
-      Alert.alert("Clear All Items", "Are you sure you want to clear all items?", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Yes", onPress: clearOrderState }, // Reset state for mobile
-      ]);
+      Alert.alert(
+        "Clear All Items",
+        "Are you sure you want to clear all items?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Yes", onPress: clearOrderState }, // Reset state for mobile
+        ]
+      );
     }
   };
-  
+
   // Helper function to reset all relevant states
   const clearOrderState = () => {
-    setOrderItems([]);               // Clear order items
-    setSelectedPaymentMethod([]);     // Reset payment methods
-    setCashChange(0);                 // Reset cash change
-    setRemainBalance(0);              // Reset remaining balance
+    setOrderItems([]); // Clear order items
+    setSelectedPaymentMethod([]); // Reset payment methods
+    setCashChange(0); // Reset cash change
+    setRemainBalance(0); // Reset remaining balance
   };
 
   const renderProductItem = ({ item }: { item: Product }) => {
@@ -520,7 +539,8 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
   const rightSwipeActions = (
     progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>,
-    productId: string
+    productId: string,
+    index: number
   ) => {
     const scale = dragX.interpolate({
       inputRange: [-100, 0],
@@ -531,24 +551,26 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
     return (
       <Animated.View style={{ transform: [{ scale }] }}>
         <View style={styles.rightActionContainer}>
-        <TouchableOpacity
-          style={[styles.rightAction, currentTheme.button]}
-          onPress={() => removeItemFromOrder(productId)}
-        >
-          <Text style={[styles.actionText,{color:"white"}]}>Add Note</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.rightAction, currentTheme.button]}
-          onPress={() => removeItemFromOrder(productId)}
-        >
-          <Text style={[styles.actionText,{color:"white"}]}>Dicount</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.rightAction, {backgroundColor:"#FF0000"}]}
-          onPress={() => removeItemFromOrder(productId)}
-        >
-          <Text style={[styles.actionText,{color:"white"}]}>Remove</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.rightAction, currentTheme.button]}
+            onPress={() => openEditModal(index)}
+          >
+            <Text style={[styles.actionText, { color: "white" }]}>
+              Add Note
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.rightAction, currentTheme.button]}
+            onPress={() => removeItemFromOrder(productId)}
+          >
+            <Text style={[styles.actionText, { color: "white" }]}>Dicount</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.rightAction, { backgroundColor: "#FF0000" }]}
+            onPress={() => removeItemFromOrder(productId)}
+          >
+            <Text style={[styles.actionText, { color: "white" }]}>Remove</Text>
+          </TouchableOpacity>
         </View>
       </Animated.View>
     );
@@ -755,24 +777,66 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
       const updatedMethods = prevMethods.includes(method)
         ? prevMethods.filter((m) => m !== method) // Remove if already selected
         : [...prevMethods, method]; // Add if not selected
-  
+
       // If only one payment method is selected and it covers the total, clear any second method
-      if (updatedMethods.length === 1 && updatedMethods[0] === "Cash" && cashChange >= total) {
+      if (
+        updatedMethods.length === 1 &&
+        updatedMethods[0] === "Cash" &&
+        cashChange >= total
+      ) {
         return [updatedMethods[0]]; // Only keep the first payment method if it covers the total
       }
-  
+
       // If there are two payment methods but the first method covers the total, remove the second
       if (updatedMethods.length > 1 && cashChange >= total) {
         return [updatedMethods[0]]; // Keep only the first payment method
       }
-  
+
       return updatedMethods; // Otherwise, return the updated methods as is
     });
   };
-  
+  const openEditModal = (index: number) => {
+    setEditingOrderIndex(index);
+    setCustomInputText(orderItems[index].customInput || '');
+    setModalVisible(true);
+  };
+
+  const saveCustomInput = (newInput: string) => {
+    if (editingOrderIndex !== null) {
+      const updatedOrders = [...orderItems];
+      updatedOrders[editingOrderIndex].customInput = newInput;
+      setOrderItems(updatedOrders);
+    }
+    setModalVisible(false);
+  };
 
   return (
-    <View style={isMobile ? [styles.containerMobile, { backgroundColor: currentTheme.backgroundColor }] : [styles.container, { backgroundColor: currentTheme.backgroundColor }]}>
+    <View
+      style={
+        isMobile
+          ? [
+              styles.containerMobile,
+              { backgroundColor: currentTheme.backgroundColor },
+            ]
+          : [
+              styles.container,
+              { backgroundColor: currentTheme.backgroundColor },
+            ]
+      }
+    >
+        <EditNoteModal
+        visible={modalVisible}
+        customInput={customInputText}
+        productName={
+          editingOrderIndex !== null
+            ? orderItems[editingOrderIndex]?.product.nameDisplay
+            : null
+        }
+        onSave={saveCustomInput}
+        onClose={() => setModalVisible(false)}
+        onChangeText={setCustomInputText}
+      />
+
       <PromptPayQRCodeModal
         visible={isQRModalVisible}
         mobileNumber={mobileNumber}
@@ -893,7 +957,7 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                   <Ionicons
                     name="chevron-forward-outline"
                     size={24}
-                    color={'#3c5867'}
+                    color={"#3c5867"}
                   />
                 </View>
               )}
@@ -950,11 +1014,11 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
         >
           <View style={styles.orderSummaryContainer}>
             <View style={styles.orderSummaryTitleContainer}>
-            <Text
-              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
-            >
-              Orders
-            </Text>
+              <Text
+                style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
+              >
+                Orders
+              </Text>
             </View>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
@@ -989,16 +1053,16 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 <Ionicons
                   name="person-circle-outline"
                   size={18}
-                  color={'#3c5867'}
+                  color={"#3c5867"}
                 />
                 <Text style={styles.orderHeaderText}> Cashier 1</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="calendar-outline" size={18}  color={'#3c5867'} />
+                <Ionicons name="calendar-outline" size={18} color={"#3c5867"} />
                 <Text style={styles.dateText}> {formattedDate}</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="time-outline" size={18}  color={'#3c5867'} />
+                <Ionicons name="time-outline" size={18} color={"#3c5867"} />
                 <View style={styles.timeContainer}>
                   <Animated.Text
                     style={[
@@ -1074,7 +1138,7 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 <Swipeable
                   key={item.product.id}
                   renderRightActions={(progress, dragX) =>
-                    rightSwipeActions(progress, dragX, item.product.id)
+                    rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
                   }
                 >
                   <Animated.View
@@ -1106,6 +1170,17 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                               </Text>
                             ))}
                           </View>
+                        )}
+                        {/* Display customInput if it exists */}
+                
+                        {item.customInput && (
+                          <Text
+                            style={[
+                              { fontFamily: "Kanit-Regular", color: "#263c48" },
+                            ]}
+                          >
+                            Note: {item.customInput}
+                          </Text>
                         )}
                       </View>
                       <View style={styles.orderItemQuantityContainer}>
@@ -1221,62 +1296,65 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 </View>
               )}
 
-{selectedPaymentMethod.length > 0 && (
-  <>
-    {/* Primary Payment Method */}
-    <View style={styles.orderTotalRow}>
-      <Text style={{ fontFamily: "GoogleSans" }}>Payment Method:</Text>
-      <Text
-        style={{
-          fontFamily: "GoogleSans",
-          textAlign: "right",
-          fontSize: 14,
-          color: "#3a5565",
-        }}
-      >
-        {selectedPaymentMethod[0] || "N/A"}
-        {selectedPaymentMethod[0] === "Cash"
-          ? ` (${cashChange?.toFixed(0)}฿)`
-          : ` (${total?.toFixed(0)}฿)`}
-      </Text>
-    </View>
+              {selectedPaymentMethod.length > 0 && (
+                <>
+                  {/* Primary Payment Method */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>
+                      Payment Method:
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans",
+                        textAlign: "right",
+                        fontSize: 14,
+                        color: "#3a5565",
+                      }}
+                    >
+                      {selectedPaymentMethod[0] || "N/A"}
+                      {selectedPaymentMethod[0] === "Cash"
+                        ? ` (${cashChange?.toFixed(0)}฿)`
+                        : ` (${total?.toFixed(0)}฿)`}
+                    </Text>
+                  </View>
 
-    {/* Secondary Payment Method, if present */}
-    {selectedPaymentMethod.length > 1 && (
-      <View style={styles.orderTotalRow}>
-        <Text style={{ fontFamily: "GoogleSans" }}>Payment Method 2:</Text>
-        <Text
-          style={{
-            fontFamily: "GoogleSans",
-            textAlign: "right",
-            fontSize: 14,
-            color: "#3a5565",
-          }}
-        >
-          {selectedPaymentMethod[1]}
-          {selectedPaymentMethod[1] === "Cash"
-            ? ` (${cashChange?.toFixed(0)}฿)`
-            : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
-        </Text>
-      </View>
-    )}
+                  {/* Secondary Payment Method, if present */}
+                  {selectedPaymentMethod.length > 1 && (
+                    <View style={styles.orderTotalRow}>
+                      <Text style={{ fontFamily: "GoogleSans" }}>
+                        Payment Method 2:
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: "GoogleSans",
+                          textAlign: "right",
+                          fontSize: 14,
+                          color: "#3a5565",
+                        }}
+                      >
+                        {selectedPaymentMethod[1]}
+                        {selectedPaymentMethod[1] === "Cash"
+                          ? ` (${cashChange?.toFixed(0)}฿)`
+                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
+                      </Text>
+                    </View>
+                  )}
 
-    {/* Change */}
-    <View style={styles.orderTotalRow}>
-      <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
-      <Text
-        style={{
-          fontFamily: "GoogleSans",
-          textAlign: "right",
-          fontSize: 14,
-        }}
-      >
-        {remainbalance?.toFixed(0)}฿
-      </Text>
-    </View>
-  </>
-)}
-
+                  {/* Change */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans",
+                        textAlign: "right",
+                        fontSize: 14,
+                      }}
+                    >
+                      {remainbalance?.toFixed(0)}฿
+                    </Text>
+                  </View>
+                </>
+              )}
 
               {/* Remaining UI elements */}
               <View style={styles.orderTotalRow}>
@@ -1303,13 +1381,13 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 }}
               >
                 {/* Secondary Payment Option if cashChange < total */}
-               
-                  <PaymentMethodSelector
-                    onMethodSelect={handleMethodSelect}
-                    handleOpenDialer={handleOpenDialer}
-                    handleOpenQrDialer={handleQrOpenDialer}
-                  />
-                 
+
+                <PaymentMethodSelector
+                  onMethodSelect={handleMethodSelect}
+                  handleOpenDialer={handleOpenDialer}
+                  handleOpenQrDialer={handleQrOpenDialer}
+                />
+
                 <TouchableOpacity
                   style={styles.proceedButton}
                   onPress={() => {
@@ -1334,11 +1412,11 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
         <View style={styles.layout2}>
           <View style={styles.orderSummaryContainer}>
             <View style={styles.orderSummaryTitleContainer}>
-            <Text
-              style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
-            >
-              Order List
-            </Text>
+              <Text
+                style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
+              >
+                Order List
+              </Text>
             </View>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
@@ -1374,16 +1452,16 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 <Ionicons
                   name="person-circle-outline"
                   size={18}
-                  color={'#3c5867'}
+                  color={"#3c5867"}
                 />
                 <Text style={styles.orderHeaderText}> Cashier 1</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="calendar-outline" size={18}  color={'#3c5867'} />
+                <Ionicons name="calendar-outline" size={18} color={"#3c5867"} />
                 <Text style={styles.dateText}> {formattedDate}</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="time-outline" size={18}  color={'#3c5867'} />
+                <Ionicons name="time-outline" size={18} color={"#3c5867"} />
                 <View style={styles.timeContainer}>
                   <Animated.Text
                     style={[
@@ -1459,7 +1537,7 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                 <Swipeable
                   key={item.product.id}
                   renderRightActions={(progress, dragX) =>
-                    rightSwipeActions(progress, dragX, item.product.id)
+                    rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
                   }
                 >
                   <Animated.View
@@ -1470,15 +1548,7 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                       opacity: animationValues[index].opacity,
                     }}
                   >
-                    <View style={styles.orderItem}>
-                      <FastImage
-                        source={{
-                          uri:
-                            item.product?.imageUrl ||
-                            "https://via.placeholder.com/100",
-                        }}
-                        style={styles.orderItemImage}
-                      />
+                    <View key={index} style={styles.orderItem}>
                       <View style={styles.orderItemTextContainer}>
                         <Text style={[{ fontFamily: "Kanit-Regular" }]}>
                           {item.product?.nameDisplay}{" "}
@@ -1487,20 +1557,7 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                             ? ` (${item.product.productSize})`
                             : ""}
                         </Text>
-                        <View style={styles.orderItemQuantityDisplayContainer}>
-                          <Text
-                            style={[
-                              {
-                                fontFamily: "GoogleSans",
-                                color: "#3a5565",
-                                fontSize: 12,
-                              },
-                            ]}
-                          >
-                            {item.quantity} x{" "}
-                            {parseFloat(item.product.price).toFixed(0)}฿
-                          </Text>
-                        </View>
+<View>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
                             {item.selectedOptions.map((option, idx) => (
@@ -1513,8 +1570,32 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                             ))}
                           </View>
                         )}
+
+                        {/* Display customInput if it exists */}
+                        {item.customInput && (
+                          <Text
+                            style={[
+                              { fontFamily: "Kanit-Regular", color: "#4682B4" },
+                            ]}
+                          >
+                            Note: {item.customInput}
+                          </Text>
+                        )}
+                        </View>
                       </View>
-                      <View style={styles.priceQuantityContainer}>
+                      <View style={styles.orderItemQuantityContainer}>
+                        <Text
+                          style={[
+                            {
+                              fontFamily: "GoogleSans",
+                              color: "#3a5565",
+                              fontSize: 14,
+                            },
+                          ]}
+                        >
+                          {item.quantity} x{" "}
+                          {parseFloat(item.product.price).toFixed(0)}฿
+                        </Text>
                         {item.selectedOptions.length > 0 && (
                           <View style={styles.optionsPriceContainer}>
                             {item.selectedOptions.map((option, idx) => (
@@ -1614,61 +1695,65 @@ const [isQRModalVisible, setQRModalVisible] = useState(false);
                   </Text>
                 </View>
               )}
-             {selectedPaymentMethod.length > 0 && (
-  <>
-    {/* Primary Payment Method */}
-    <View style={styles.orderTotalRow}>
-      <Text style={{ fontFamily: "GoogleSans" }}>Payment Method:</Text>
-      <Text
-        style={{
-          fontFamily: "GoogleSans",
-          textAlign: "right",
-          fontSize: 14,
-          color: "#3a5565",
-        }}
-      >
-        {selectedPaymentMethod[0] || "N/A"}
-        {selectedPaymentMethod[0] === "Cash"
-          ? ` (${cashChange?.toFixed(0)}฿)`
-          : ` (${total?.toFixed(0)}฿)`}
-      </Text>
-    </View>
+              {selectedPaymentMethod.length > 0 && (
+                <>
+                  {/* Primary Payment Method */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>
+                      Payment Method:
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans",
+                        textAlign: "right",
+                        fontSize: 14,
+                        color: "#3a5565",
+                      }}
+                    >
+                      {selectedPaymentMethod[0] || "N/A"}
+                      {selectedPaymentMethod[0] === "Cash"
+                        ? ` (${cashChange?.toFixed(0)}฿)`
+                        : ` (${total?.toFixed(0)}฿)`}
+                    </Text>
+                  </View>
 
-    {/* Secondary Payment Method, if present */}
-    {selectedPaymentMethod.length > 1 && (
-      <View style={styles.orderTotalRow}>
-        <Text style={{ fontFamily: "GoogleSans" }}>Payment Method 2:</Text>
-        <Text
-          style={{
-            fontFamily: "GoogleSans",
-            textAlign: "right",
-            fontSize: 14,
-            color: "#3a5565",
-          }}
-        >
-          {selectedPaymentMethod[1]}
-          {selectedPaymentMethod[1] === "Cash"
-            ? ` (${cashChange?.toFixed(0)}฿)`
-            : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
-        </Text>
-      </View>
-    )}
+                  {/* Secondary Payment Method, if present */}
+                  {selectedPaymentMethod.length > 1 && (
+                    <View style={styles.orderTotalRow}>
+                      <Text style={{ fontFamily: "GoogleSans" }}>
+                        Payment Method 2:
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: "GoogleSans",
+                          textAlign: "right",
+                          fontSize: 14,
+                          color: "#3a5565",
+                        }}
+                      >
+                        {selectedPaymentMethod[1]}
+                        {selectedPaymentMethod[1] === "Cash"
+                          ? ` (${cashChange?.toFixed(0)}฿)`
+                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
+                      </Text>
+                    </View>
+                  )}
 
-    {/* Change */}
-    <View style={styles.orderTotalRow}>
-      <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
-      <Text
-        style={{
-          fontFamily: "GoogleSans",
-          textAlign: "right",
-          fontSize: 14,
-        }}
-      >
-        {remainbalance?.toFixed(0)}฿
-      </Text>
-    </View>
-  </>
-)}
+                  {/* Change */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans",
+                        textAlign: "right",
+                        fontSize: 14,
+                      }}
+                    >
+                      {remainbalance?.toFixed(0)}฿
+                    </Text>
+                  </View>
+                </>
+              )}
 
               {/* Remaining UI elements */}
               <View style={styles.orderTotalRow}>
@@ -1813,7 +1898,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: "30%",
     justifyContent: "center",
-    alignItems:"center",
+    alignItems: "center",
   },
   orderSummaryTitle: {
     fontSize: 16,
@@ -1859,13 +1944,11 @@ const styles = StyleSheet.create({
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: "transparent",
-     
   },
   tabActive: {
     padding: 10,
     borderBottomWidth: 3,
     borderBottomColor: "#3a5565",
-    
   },
   tabText: {
     fontFamily: "GoogleSans",
@@ -2029,17 +2112,16 @@ const styles = StyleSheet.create({
   rightAction: {
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
-    padding: 10,
-    height: "80%",
+    width: 65,
+    padding: isMobile ? 2 : 5,
+    height: "70%",
     borderRadius: 20,
-    marginLeft: 10,
+    marginLeft: isMobile ? 2 : 5,
     marginVertical: 5,
   },
   actionText: {
     fontFamily: "GoogleSans",
-    fontSize: 12,
-   
+    fontSize: isMobile ? 10 : 12,
   },
   orderItemSwipeableContainer: {
     marginBottom: 10,
@@ -2054,7 +2136,6 @@ const styles = StyleSheet.create({
   orderHeaderText: {
     color: "#444",
     fontSize: 14,
-    
   },
   orderHeaderReceiptText: {
     color: "#444",
@@ -2144,7 +2225,7 @@ const styles = StyleSheet.create({
   },
   rightActionContainer: {
     flexDirection: "row",
-  }
+  },
 });
 
 export default Orders;

@@ -21,9 +21,9 @@ export interface Option {
   export interface OrderItem {
     product: Product;
     quantity: number;
-   
-    selectedOptions: Option[];
+   selectedOptions: Option[];
     imageUrl?: string | null;
+   customInput?: string; // Now 'customInput' is valid
   }
   
   export type Category = {

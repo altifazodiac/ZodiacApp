@@ -8,14 +8,13 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  TextInput,
   Platform,
   Easing,
 } from "react-native";
-import { AntDesign } from "@expo/vector-icons";
-import { Option, Product } from "../Data/types";
+import { Option, Product } from "../Data/types"; // Ensure proper import
 import { ref, onValue } from "firebase/database";
 import { database } from "../app/firebase";
-import PhoneDialerModal from './PhoneDialerModal';  
 
 interface Props {
   visible: boolean;
@@ -25,7 +24,11 @@ interface Props {
   setSelectedOptions: React.Dispatch<
     React.SetStateAction<{ [key: string]: Option[] }>
   >;
-  addItemToOrder: (product: Product, options: Option[]) => void;
+  addItemToOrder: (
+    product: Product,
+    options: Option[],
+   
+  ) => void;
 }
 
 const OptionItem: React.FC<{
@@ -59,17 +62,18 @@ const OrderDetailsModal: React.FC<Props> = ({
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Start off-screen and with zero opacity
-  const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   const [options, setOptions] = useState<Option[]>([]);
+
+  const slideAnim = useRef(
+    new Animated.Value(Dimensions.get("window").height)
+  ).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const slideValue = visible ? 0 : Dimensions.get("window").height;
     const opacityValue = visible ? 1 : 0;
 
-    // Run slide and fade animations together
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: slideValue,
@@ -85,18 +89,18 @@ const OrderDetailsModal: React.FC<Props> = ({
       }),
     ]).start(() => {
       if (!visible) {
-        onClose(); // Close modal after hiding
+        onClose();
       }
     });
   }, [visible]);
 
   useEffect(() => {
-    const optionsRef = ref(database, "OrderDetail"); // Adjust to your Firebase structure
+    const optionsRef = ref(database, "OrderDetail");
 
     const unsubscribe = onValue(optionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const formattedOptions = Object.keys(data).map((key) => ({
+        const formattedOptions: Option[] = Object.keys(data).map((key) => ({
           id: key,
           name: data[key].name,
           price: data[key].price,
@@ -107,7 +111,7 @@ const OrderDetailsModal: React.FC<Props> = ({
     });
 
     return () => {
-      unsubscribe(); // Cleanup listener
+      unsubscribe();
     };
   }, []);
 
@@ -116,75 +120,79 @@ const OrderDetailsModal: React.FC<Props> = ({
 
     setSelectedOptions((prevOptions) => {
       const productOptions = prevOptions[currentProduct.id] || [];
-      const optionExists = productOptions.some((o) => o.name === option.name);
+      const optionExists = productOptions.some(
+        (o: Option) => o.name === option.name
+      ); // Explicit type
 
       const updatedOptions = optionExists
-        ? productOptions.filter((o) => o.name !== option.name)
+        ? productOptions.filter((o: Option) => o.name !== option.name) // Explicit type
         : [...productOptions, option];
 
       return { ...prevOptions, [currentProduct.id]: updatedOptions };
     });
   };
 
-  return (
+ return (
     <Modal transparent={true} visible={visible} animationType="none">
-    <View style={styles.centeredView}>
-      <Animated.View
-        style={[
-          styles.modalView,
-          { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
-        ]}
-      >
-        <Text style={styles.modalText}>
-          Details for {currentProduct?.nameDisplay || "No Product Selected"}
-        </Text>
+      <View style={styles.centeredView}>
+        <Animated.View
+          style={[
+            styles.modalView,
+            { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
+          ]}
+        >
+          <Text style={styles.modalText}>
+            Details for {currentProduct?.nameDisplay || "No Product Selected"}
+          </Text>
 
-        <View style={styles.contentContainer}>
-          <ScrollView ref={scrollViewRef} style={styles.scrollView}>
-            <View style={styles.optionsGrid}>
-              {options
-                .filter((option) => option.status !== false)
-                .map((option) => {
-                  const isSelected = (
-                    selectedOptions[currentProduct?.id || ""] || []
-                  ).some((o) => o.name === option.name);
+          <View style={styles.contentContainer}>
+            <ScrollView ref={scrollViewRef} style={styles.scrollView}>
+              <View style={styles.optionsGrid}>
+                {options
+                  .filter((option) => option.status !== false)
+                  .map((option) => {
+                    const isSelected = (
+                      selectedOptions[currentProduct?.id || ""] || []
+                    ).some((o: Option) => o.name === option.name);
 
-                  return (
-                    <OptionItem
-                      key={option.id}
-                      option={option}
-                      isSelected={isSelected}
-                      onPress={() => handleOptionPress(option)}
-                    />
+                    return (
+                      <OptionItem
+                        key={option.id}
+                        option={option}
+                        isSelected={isSelected}
+                        onPress={() => handleOptionPress(option)}
+                      />
+                    );
+                  })}
+              </View>
+             </ScrollView>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  if (!currentProduct) return;
+               
+                  addItemToOrder(
+                    currentProduct,
+                    selectedOptions[currentProduct?.id || ""] || [],
+                    
                   );
-                })}
+              
+                  onClose();
+                }}
+              >
+                <Text style={styles.addButtonText}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
             </View>
-          </ScrollView>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                if (!currentProduct) return;
-                addItemToOrder(
-                  currentProduct,
-                  selectedOptions[currentProduct?.id || ""] || []
-                );
-                onClose();
-              }}
-            >
-              <Text style={styles.addButtonText}>Add</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </Animated.View>
-    </View>
-  </Modal>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
-
 export default OrderDetailsModal;
 
 const isMobile = false;
@@ -204,25 +212,42 @@ const styles = StyleSheet.create({
         width: "100%",
         height: "100%",
       },
-  centeredView: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-  modalView: {
-    width: "80%",
-    height: "65%",
-    backgroundColor: "white",
-    borderRadius: 15,
-    padding: 20,
-    alignItems: "center",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-  },
+      centeredView: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
+      },
+      // Modal view
+      modalView: {
+        width: "80%",
+        height: "65%",
+        backgroundColor: "white",
+        borderRadius: 15,
+        padding: 20,
+        alignItems: "center",
+        elevation: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        position: "relative", // Added relative positioning
+      },
+   
+      // Content Container
+      contentContainer: {
+        flex: 1,
+        width: "100%", // Full width for the content
+        justifyContent: "space-between", // Space between ScrollView and buttons
+      },
+      scrollView: {
+        flex: 1, // Allow ScrollView to take available space
+        maxHeight: "80%",
+        width: "100%",
+        paddingRight: 20, // Ensure enough space for character count
+      },
+      
+  
   modalText: {
     fontFamily: "GoogleSans, Kanit",
     fontSize: 18,
@@ -231,16 +256,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  contentContainer: {
-    flex: 1,
-    width: "100%", // Full width for the content
-    justifyContent: "space-between", // Space between ScrollView and buttons
-  },
-  scrollView: {
-    flex: 1, // Allow ScrollView to take available space
-    maxHeight: "80%",
-    width: "100%",
-  },
+  
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-evenly", // Buttons centered with space between
@@ -300,11 +316,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   activeButton: {
-     borderColor: "#3a5565",
-     borderWidth: 3,  
+    borderColor: "#3a5565",
+    borderWidth: 3,
   },
   inactiveButton: {
-    backgroundColor: "#fff", 
+    backgroundColor: "#fff",
     borderColor: "transparent",
   },
   activeText: {
