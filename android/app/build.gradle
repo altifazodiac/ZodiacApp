@@ -88,11 +88,11 @@ android {
 
     namespace "com.zodiacapp"
     defaultConfig {
-        applicationId "com.zodiacapp"
+        applicationId 'com.alfadevth.ZodiacApp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
     }
     signingConfigs {
         debug {

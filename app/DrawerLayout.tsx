@@ -11,6 +11,7 @@ import Orders from './Orders';
 import OrderDetail from './OrderDetail';
 import Setting from './Setting';
 import MemberRegister from './MemberRegister';
+import Passcode from './Passcode';
  
 
 const Drawer = createDrawerNavigator();
@@ -43,6 +44,16 @@ const DrawerLayout = () => {
           ),
         }}
         component={Login}  
+      />
+       <Drawer.Screen
+        name="Passcode"
+        options={{
+          title: 'Passcode',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={Passcode}  
       />
        <Drawer.Screen
         name="Orders"

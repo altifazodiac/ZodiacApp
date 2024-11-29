@@ -1,4 +1,4 @@
-package com.zodiacapp
+package com.alfadevth.ZodiacApp
 
 import android.app.Application
 import android.content.res.Configuration

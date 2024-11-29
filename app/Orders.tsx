@@ -20,6 +20,7 @@ import {
   Vibration,
   Alert,
   Image,
+  TextInput,
 } from "react-native";
 import { db, ref, onValue } from "./firebase";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -27,7 +28,7 @@ import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from "react-native-gesture-handler/Swipeable";
 import { database } from "../app/firebase";
 import { DatabaseReference, get, set } from "firebase/database";
 import AntDesign from "@expo/vector-icons/AntDesign";
@@ -94,7 +95,10 @@ const Orders = () => {
   const [isDialerVisible, setDialerVisible] = useState(false);
   const [moneyChanged, setMoneyChanged] = useState(0);
   const [cashChange, setCashChange] = useState(0);
-
+  const [savedDiscounts, setSavedDiscounts] = useState<{
+    [key: number]: boolean;
+  }>({});
+  const [inputErrors, setInputErrors] = useState<{ [key: number]: string }>({});
   const handleOpenDialer = () => setDialerVisible(true);
   const handleCloseDialer = () => setDialerVisible(false);
   const handleMoneyChanged = (value: number) => setMoneyChanged(value);
@@ -106,14 +110,16 @@ const Orders = () => {
   const mobileNumber = "0812345678"; // Replace with customer mobile number
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingOrderIndex, setEditingOrderIndex] = useState<number | null>(null);
-  const [customInputText, setCustomInputText] = useState('');
+  const [editingOrderIndex, setEditingOrderIndex] = useState<number | null>(
+    null
+  );
+  const [customInputText, setCustomInputText] = useState("");
   const openQRCodeModal = () => setQRModalVisible(true); // For showing PromptPay QR modal
   const closeQRCodeModal = () => setQRModalVisible(false);
   const handleQrOpenDialer = () => {
     openQRCodeModal(); // Call QR modal opener function here
   };
-
+  const [inputVisible, setInputVisible] = useState(true); // Tracks visibility of TextInput
   const isValidOption = (option: any): option is Option => {
     return (
       typeof option === "object" &&
@@ -172,7 +178,10 @@ const Orders = () => {
   const translateYAnimHour = useRef(new Animated.Value(0)).current;
   const translateYAnimMinute = useRef(new Animated.Value(0)).current;
   const translateYAnimSecond = useRef(new Animated.Value(0)).current;
-
+  const [discounts, setDiscounts] = useState<{ [key: number]: string }>({});
+  const [visibleDiscountInput, setVisibleDiscountInput] = useState<
+    number | null
+  >(null);
   useEffect(() => {
     const updateDateTime = () => {
       const date = new Date();
@@ -377,11 +386,11 @@ const Orders = () => {
       const existingItemIndex = prevOrderItems.findIndex(
         (item) => item.product.id === product.id
       );
-  
+
       if (existingItemIndex !== -1) {
         const updatedOrderItems = [...prevOrderItems];
         const existingItem = updatedOrderItems[existingItemIndex];
-  
+
         updatedOrderItems[existingItemIndex] = {
           ...existingItem,
           quantity: existingItem.quantity + 1,
@@ -561,7 +570,7 @@ const Orders = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.rightAction, currentTheme.button]}
-            onPress={() => removeItemFromOrder(productId)}
+            onPress={() => handleDiscountToggle(index)}
           >
             <Text style={[styles.actionText, { color: "white" }]}>Dicount</Text>
           </TouchableOpacity>
@@ -648,38 +657,57 @@ const Orders = () => {
   });
   const [settings, setSettings] = useState<Settings | null>();
   // 2. Then calculate subtotal
-  const subtotal = orderItems.reduce(
-    (sum, item) =>
-      sum +
+  // Function to calculate the price of an item after discount
+  const getDiscountedPrice = (item: OrderItem, index: number) => {
+    const discount = parseFloat(discounts[index]) || 0; // Retrieve the custom discount for this item
+    const basePrice =
       item.quantity *
-        (parseFloat(item.product.price) +
-          item.selectedOptions.reduce((sum, option) => sum + option.price, 0)),
-    0
-  );
+      (parseFloat(item.product.price) +
+        item.selectedOptions.reduce(
+          (sum: number, option) => sum + option.price,
+          0
+        ));
+    return Math.max(basePrice - discount, 0); // Ensure price is not negative
+  };
 
-  const discount = subtotal
-    ? settings?.OrderPanels.displayDiscount
-      ? settings?.OrderPanels.isPercentage
-        ? ((settings?.OrderPanels.discountValue || 0) / 100) * subtotal
-        : settings?.OrderPanels.discountValue || 0
-      : 0
-    : 0;
+  // Calculate subtotal using getDiscountedPrice
+  const subtotal = orderItems.reduce((sum, item, index) => {
+    const discountedPrice = getDiscountedPrice(item, index); // Apply per-item discount
+    return sum + discountedPrice;
+  }, 0);
 
-  // Calculate tax based on settings
+  // Calculate total discount applied (optional, for display purposes)
+  const totalDiscount = orderItems.reduce((sum, item, index) => {
+    const basePrice =
+      item.quantity *
+      (parseFloat(item.product.price) +
+        item.selectedOptions.reduce(
+          (optionSum, option) => optionSum + option.price,
+          0
+        ));
+    const discountedPrice = getDiscountedPrice(item, index);
+    return sum + (basePrice - discountedPrice); // Accumulate the total discount
+  }, 0);
+
+  // Calculate tax based on the new subtotal
   const tax = settings?.OrderPanels.displayTax
     ? subtotal * (settings?.OrderPanels.taxValue || 0) // Assuming taxValue is a decimal
     : 0;
 
-  // Calculate service charge based on settings
+  // Calculate service charge based on the new subtotal
   const serviceCharge = settings?.OrderPanels.displayServiceCharge
     ? subtotal * (settings?.OrderPanels.serviceChargeValue || 0) // Assuming serviceChargeValue is a decimal
     : 0;
 
   // Calculate the total amount
-  const total = subtotal - discount + tax + serviceCharge;
+  const total = subtotal + tax + serviceCharge;
 
+  // Format the discount value for display (optional)
   const discountValue =
-    discount >= 1 ? `-${discount.toFixed(0)}฿` : `${discount.toFixed(0)}฿`;
+    totalDiscount >= 1
+      ? `-${totalDiscount.toFixed(0)}฿`
+      : `${totalDiscount.toFixed(0)}฿`;
+
   useEffect(() => {
     const settingsRef: DatabaseReference = ref(database, "settings");
 
@@ -797,7 +825,7 @@ const Orders = () => {
   };
   const openEditModal = (index: number) => {
     setEditingOrderIndex(index);
-    setCustomInputText(orderItems[index].customInput || '');
+    setCustomInputText(orderItems[index].customInput || "");
     setModalVisible(true);
   };
 
@@ -810,6 +838,26 @@ const Orders = () => {
     setModalVisible(false);
   };
 
+  const handleDiscountToggle = (index: number) => {
+    setVisibleDiscountInput(visibleDiscountInput === index ? null : index);
+  };
+
+  const handleDiscountChange = (value: string, index: number) => {
+    setDiscounts((prev) => ({
+      ...prev,
+      [index]: value,
+    }));
+  };
+  const handleSaveDiscount = (index: number) => {
+    if (!inputErrors[index]) {
+      setSavedDiscounts((prev) => ({
+        ...prev,
+        [index]: !prev[index], // Toggle ระหว่างบันทึกและลบ
+      }));
+    }
+  };
+ 
+  
   return (
     <View
       style={
@@ -824,7 +872,7 @@ const Orders = () => {
             ]
       }
     >
-        <EditNoteModal
+      <EditNoteModal
         visible={modalVisible}
         customInput={customInputText}
         productName={
@@ -1135,10 +1183,12 @@ const Orders = () => {
             </View>
             <ScrollView>
               {orderItems.map((item, index) => (
+                
                 <Swipeable
                   key={item.product.id}
-                  renderRightActions={(progress, dragX) =>
-                    rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
+                  renderRightActions={
+                    (progress, dragX) =>
+                      rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
                   }
                 >
                   <Animated.View
@@ -1172,7 +1222,7 @@ const Orders = () => {
                           </View>
                         )}
                         {/* Display customInput if it exists */}
-                
+
                         {item.customInput && (
                           <Text
                             style={[
@@ -1536,16 +1586,58 @@ const Orders = () => {
               {orderItems.map((item, index) => (
                 <Swipeable
                   key={item.product.id}
-                  renderRightActions={(progress, dragX) =>
-                    rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
-                  }
+                  renderRightActions={(progress, dragX) => (
+                    <Animated.View
+                      style={{
+                        transform: [
+                          {
+                            scale: dragX.interpolate({
+                              inputRange: [-100, 0],
+                              outputRange: [1, 0.5],
+                              extrapolate: "clamp",
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <View style={styles.rightActionContainer}>
+                        <TouchableOpacity
+                          style={[styles.rightAction, currentTheme.button]}
+                          onPress={() => openEditModal(index)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Add Note
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.rightAction, currentTheme.button]}
+                          onPress={() => handleDiscountToggle(index)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Discount
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.rightAction,
+                            { backgroundColor: "#FF0000" },
+                          ]}
+                          onPress={() => removeItemFromOrder(item.product.id)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Remove
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Animated.View>
+                  )}
                 >
                   <Animated.View
                     style={{
                       transform: [
-                        { translateY: animationValues[index].translateY },
+                        { translateY: animationValues[index]?.translateY || 0 },
                       ],
-                      opacity: animationValues[index].opacity,
+                      opacity: animationValues[index]?.opacity || 1,
                     }}
                   >
                     <View key={index} style={styles.orderItem}>
@@ -1557,30 +1649,85 @@ const Orders = () => {
                             ? ` (${item.product.productSize})`
                             : ""}
                         </Text>
-<View>
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
+                        <View>
+                          {item.selectedOptions.length > 0 && (
+                            <View style={styles.optionsPriceContainer}>
+                              {item.selectedOptions.map((option, idx) => (
+                                <Text
+                                  key={idx}
+                                  style={styles.optionPriceTextItem}
+                                >
+                                  ({option.name})
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                          {item.customInput && (
+                            <Text
+                              style={[
+                                {
+                                  fontFamily: "Kanit-Regular",
+                                  color: "#4682B4",
+                                },
+                              ]}
+                            >
+                              Note: {item.customInput}
+                            </Text>
+                          )}
+                          {visibleDiscountInput === index && inputVisible && (
+                            <View style={styles.discountInputContainer}>
+                              <TextInput
+                                style={[
+                                  styles.discountInput,
+                                  inputErrors[index] && {
+                                    backgroundColor: "#ffe6e6",
+                                  },
+                                ]}
+                                placeholder="Enter discount"
+                                placeholderTextColor="#888"
+                                keyboardType="numeric"
+                                value={discounts[index] || ""}
+                                onChangeText={(value) =>
+                                  handleDiscountChange(value, index)
+                                }
+                              />
+                              {inputErrors[index] && (
+                                <Text
+                                  style={{
+                                    color: "red",
+                                    fontSize: 12,
+                                    marginLeft: 10,
+                                  }}
+                                >
+                                  {inputErrors[index]}
+                                </Text>
+                              )}
+                              <TouchableOpacity
+                                style={[
+                                  styles.saveButton,
+                                  savedDiscounts[index]
+                                    ? { backgroundColor: "#4682B4" }
+                                    : { backgroundColor: "#f9f9f9" },
+                                ]}
+                                onPress={() => handleSaveDiscount(index)}
                               >
-                                ({option.name})
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-
-                        {/* Display customInput if it exists */}
-                        {item.customInput && (
-                          <Text
-                            style={[
-                              { fontFamily: "Kanit-Regular", color: "#4682B4" },
-                            ]}
-                          >
-                            Note: {item.customInput}
-                          </Text>
-                        )}
+                                <Text
+                                  style={[
+                                    styles.saveButtonText, // Using the saveButtonText style here
+                                    {
+                                      color: savedDiscounts[index]
+                                        ? "#fff"
+                                        : "#333",
+                                    },
+                                  ]}
+                                >
+                                  {savedDiscounts[index]
+                                    ? "Remove Discount"
+                                    : "Save Discount"}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
                         </View>
                       </View>
                       <View style={styles.orderItemQuantityContainer}>
@@ -1609,16 +1756,9 @@ const Orders = () => {
                           </View>
                         )}
                       </View>
+
                       <Text style={styles.orderItemPrice}>
-                        {(
-                          item.quantity *
-                          (parseFloat(item.product.price) +
-                            item.selectedOptions.reduce(
-                              (sum, option) => sum + option.price,
-                              0
-                            ))
-                        ).toFixed(0)}
-                        ฿
+                        {getDiscountedPrice(item, index)}฿
                       </Text>
                     </View>
                   </Animated.View>
@@ -1665,7 +1805,6 @@ const Orders = () => {
                   </Text>
                 </View>
               )}
-
               {/* Tax */}
               {settings?.OrderPanels.displayTax && (
                 <View style={styles.orderTotalRow}>
@@ -1755,7 +1894,7 @@ const Orders = () => {
                 </>
               )}
 
-              {/* Remaining UI elements */}
+              {/* Total */}
               <View style={styles.orderTotalRow}>
                 <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
                 <Text
@@ -2225,6 +2364,57 @@ const styles = StyleSheet.create({
   },
   rightActionContainer: {
     flexDirection: "row",
+  },
+  discountInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "60%",
+    marginTop: 10,
+  },
+  discountInput: {
+    flex: 1,
+    fontFamily: "GoogleSans",
+    borderWidth: 1,
+    borderColor: "#ddd", // Softer border color for a modern look
+    borderRadius: 2, // Rounded corners for a cleaner design
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 14, // Smaller font for a more compact look
+    color: "#333", // Dark text for clarity
+    backgroundColor: "#fff", // White background for a sleek modern appearance
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 }, // Subtle shadow
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+
+  saveButton: {
+    fontSize: 10, // Smaller font for a more compact look
+    marginLeft: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 2, // Slightly rounded corners
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ccc", // Light border to match input field
+    backgroundColor: "#4682B4", // Modern blue color for the button
+    shadowColor: "#4682B4", // Matching shadow color for a cohesive design
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2, // Subtle raised effect
+
+    alignSelf: "flex-end",
+  },
+
+  saveButtonText: {
+    fontFamily: "GoogleSans",
+    color: "#fff", // White text for contrast
+    fontSize: 10, // Small text for a sleek appearance
+    fontWeight: "bold", // Bold text to make the button stand out
   },
 });
 

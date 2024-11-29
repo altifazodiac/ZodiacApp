@@ -13,13 +13,21 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow ZodiacApp to use Face ID."
+      },
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ],
+      "package": "com.alfadevth.ZodiacApp"
     },
     "web": {
       "bundler": "metro",
@@ -28,7 +36,9 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-local-authentication",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
