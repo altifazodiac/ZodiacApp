@@ -38,7 +38,8 @@
       "expo-router",
       "expo-font",
       "expo-local-authentication",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

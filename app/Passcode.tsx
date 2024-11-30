@@ -14,8 +14,10 @@ import { NavigationProp } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Asset } from 'expo-asset';
+import { Asset } from "expo-asset";
+import * as SecureStore from "expo-secure-store";
 
+ 
 
 const PasscodeButton = ({
   number,
@@ -30,36 +32,64 @@ const PasscodeButton = ({
 );
 
 export default function PasscodeScreen() {
-  const [password, setPassword] = useState<string[]>([]);
+  const [inputPasscode, setInputPasscode] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [disableInput, setDisableInput] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const navigation: NavigationProp<any> = useNavigation();
   const [biometricType, setBiometricType] = useState<string | null>(null);
-  const logotype = Asset.fromModule(require('../assets/images/face-id.png')).uri;
+  const logotype = Asset.fromModule(require("../assets/images/face-id.png")).uri;
 
+  const verifyPasscode = async (inputPasscode: string): Promise<boolean> => {
+    try {
+      const savedPasscode = await SecureStore.getItemAsync("userPasscode");
+      console.log("Retrieved Passcode: ", savedPasscode);
+      console.log("Input Passcode: ", inputPasscode);
+      if (!savedPasscode) {
+        Alert.alert("Error", "No passcode set.");
+        return false;
+      }
+      return savedPasscode.trim() === inputPasscode.trim();
+    } catch (error) {
+      console.error("Error verifying passcode: ", error);
+      Alert.alert("Error", "Failed to verify the passcode.");
+      return false;
+    }
+  };
   
-  const correctPassword = "123456";
-
-  const handlePress = (number: string) => {
-    if (disableInput || password.length >= 6) return;
-
-    const newPassword = [...password, number];
-    setPassword(newPassword);
-
-    if (newPassword.length === 6) {
-      if (newPassword.join("") === correctPassword) {
+  const handlePress = async (number: string) => {
+    if (disableInput || inputPasscode.length >= 6) return;
+  
+    const newPasscode = [...inputPasscode, number];
+    setInputPasscode(newPasscode);
+  
+    if (newPasscode.length === 6) {
+      setDisableInput(true); // Prevent additional inputs
+      if (attempts >= 5) {
+        Alert.alert("Locked", "Too many failed attempts. Try again later.");
+        setDisableInput(false);
+        return;
+      }
+  
+      const isVerified = await verifyPasscode(newPasscode.join(""));
+      if (isVerified) {
         setMessage(null);
-        navigation.navigate("Orders");
-        setPassword([]);
+        setInputPasscode([]);
         setAttempts(0);
+        navigation.navigate("Orders");
       } else {
-        setPassword([]);
+        setInputPasscode([]);
         setAttempts((prev) => prev + 1);
         setMessage(`Incorrect password. Attempts: ${attempts + 1}`);
       }
+      setDisableInput(false); // Re-enable input
     }
   };
+
+  const handleBackspace = () => {
+    setInputPasscode((prev) => prev.slice(0, -1));
+  };
+
   useEffect(() => {
     const checkBiometricType = async () => {
       const types =
@@ -90,51 +120,18 @@ export default function PasscodeScreen() {
       );
       return;
     }
-  
+
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: `Authenticate with ${biometricType}`,
       fallbackLabel: "Use Passcode",
     });
-  
+
     if (result.success) {
       navigation.navigate("Orders");
     } else {
       Alert.alert(
         "Error",
         `${biometricType} authentication failed. Please try again.`
-      );
-    }
-  };
-  const handleFingerprintScan = async () => {
-    if (disableInput) return;
-    setDisableInput(true);
-
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-    if (!hasHardware || !isEnrolled) {
-      Alert.alert(
-        "Error",
-        "Fingerprint authentication is not available on this device."
-      );
-      setDisableInput(false);
-      return;
-    }
-
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: "Authenticate with Fingerprint",
-      fallbackLabel: "Use Passcode",
-    });
-
-    setDisableInput(false);
-
-    if (result.success) {
-      //Alert.alert("Success", "Fingerprint authentication successful!");
-      navigation.navigate("Orders");
-    } else {
-      Alert.alert(
-        "Error",
-        "Fingerprint authentication failed. Please try again."
       );
     }
   };
@@ -145,7 +142,7 @@ export default function PasscodeScreen() {
         key={index}
         style={[
           styles.circle,
-          password[index] ? styles.filledCircle : styles.emptyCircle,
+          inputPasscode[index] ? styles.filledCircle : styles.emptyCircle,
         ]}
       />
     ));
@@ -159,13 +156,10 @@ export default function PasscodeScreen() {
       end={{ x: 1, y: 1 }}
     >
       <View style={styles.container}>
-        {/* Feedback Message */}
         {message && <Text style={styles.feedbackText}>{message}</Text>}
 
-        {/* Password Circles */}
         <View style={styles.circlesContainer}>{renderCircles()}</View>
 
-        {/* Number Buttons */}
         <View style={styles.row}>
           <PasscodeButton number="1" onPress={handlePress} />
           <PasscodeButton number="2" onPress={handlePress} />
@@ -182,32 +176,25 @@ export default function PasscodeScreen() {
           <PasscodeButton number="9" onPress={handlePress} />
         </View>
         <View style={styles.row}>
-          {/* Conditionally render biometric button */}
           {biometricType === "Face ID" ? (
             <TouchableOpacity
               style={styles.iconButton}
               onPress={handleBiometricAuth}
             >
-         <Image style={{ width: 30, height: 30 }} source={{ uri: logotype }} />
+              <Image style={{ width: 30, height: 30 }} source={{ uri: logotype }} />
             </TouchableOpacity>
-          ) :   (
+          ) : (
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={handleFingerprintScan}
+              onPress={handleBiometricAuth}
             >
               <Ionicons name="finger-print" size={28} color="#263c48" />
-            
             </TouchableOpacity>
           )}
 
-          {/* Passcode Button */}
           <PasscodeButton number="0" onPress={handlePress} />
 
-          {/* Backspace Button */}
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => setPassword(password.slice(0, -1))}
-          >
+          <TouchableOpacity style={styles.iconButton} onPress={handleBackspace}>
             <Ionicons name="backspace" size={28} color="#263c48" />
           </TouchableOpacity>
         </View>
@@ -219,9 +206,9 @@ export default function PasscodeScreen() {
 const isTablet = Dimensions.get("window").width > 768;
 const styles = StyleSheet.create({
   container: {
-    flex: 1, // Ensures the container takes up the full screen height
-    justifyContent: "center", // Vertically center the content
-    alignItems: "center", // Horizontally center the content
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   circlesContainer: {
     flexDirection: "row",
@@ -243,8 +230,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center", // Ensures alignment across all rows
-    marginVertical: isTablet ? 15 : 10, // Larger spacing for tablets
+    alignItems: "center",
+    marginVertical: isTablet ? 15 : 10,
   },
   button: {
     width: 80,
@@ -261,17 +248,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   number: {
-    fontFamily: "GoogleSans",
-    fontSize: isTablet ? 36 : 28, // Larger text for tablets
+    fontSize: isTablet ? 36 : 28,
     fontWeight: "600",
     color: "#fff",
   },
-  placeholder: {
-    width: Dimensions.get("window").width / 4,
-    height: Dimensions.get("window").width / 4,
-  },
   feedbackText: {
-    fontFamily: "GoogleSans",
     color: "#ff0000",
     fontSize: 16,
     marginBottom: 20,
@@ -288,22 +269,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: isTablet ? 16 : 12,
   },
-  iconText: {
-    fontSize: 28,
-    color: "#263c48",
-  },
-  buttonText: {
-    marginTop: 8,
-    fontSize: 16,
-    color: "#263c48",
-  },
-  errorText: {
-    color: "#ff0000",
-    fontSize: 16,
-    marginTop: 20,
-  },
-  icon: {
-    width: isTablet ? 50 : 40,
-    height: isTablet ? 50 : 40,
-  }
 });

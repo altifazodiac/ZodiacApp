@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,33 +7,42 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Checkbox } from "react-native-paper";
-import { theme } from "../components/theme";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { useNavigation } from "@react-navigation/native";
+import { NavigationProp } from "@react-navigation/native";
 
 export default function App() {
-  const [isRemember, setIsRemember] = React.useState(false);
-  const [blurIntensity, setBlurIntensity] = React.useState(50);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isRemember, setIsRemember] = useState(false);
+  const [blurIntensity, setBlurIntensity] = useState(50);
   const slideAnim = useRef(new Animated.Value(100)).current;
   const componentAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
   const borderAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.4)).current; // Initial scale value
+  const scaleAnim = useRef(new Animated.Value(0.4)).current;
+  const easingConfig = useMemo(
+    () => Easing.bezier(0.39, 0.575, 0.565, 1.0),
+    []
+  );
+  const navigation: NavigationProp<any> = useNavigation();
 
   useEffect(() => {
     Animated.timing(scaleAnim, {
-      toValue: 1, // Final scale value
-      duration: 400, // Animation duration in milliseconds
-      useNativeDriver: true, // Enable native driver for better performance
-      easing: Easing.bezier(0.39, 0.575, 0.565, 1.0), // Use Easing directly
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+      easing: easingConfig,
     }).start();
   }, []);
+
   useEffect(() => {
-    // Step 1: Animate the LoginBox (fade and slide up)
-    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -48,14 +57,12 @@ export default function App() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      // Step 2: Animate the TextInputs (fade and slide up sequentially)
       Animated.timing(componentAnim, {
         toValue: 1,
         duration: 800,
         easing: Easing.out(Easing.exp),
         useNativeDriver: true,
       }).start(() => {
-        // Step 3: Animate the Button (scale and slide up)
         Animated.timing(buttonScale, {
           toValue: 1,
           duration: 800,
@@ -65,7 +72,6 @@ export default function App() {
       });
     });
 
-    // Step 4: Border Animation (independent loop)
     Animated.loop(
       Animated.timing(borderAnim, {
         toValue: 1,
@@ -76,20 +82,35 @@ export default function App() {
     ).start();
   }, []);
 
-  const increaseBlur = () => {
-    setBlurIntensity(80);
+  const validateInputs = () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Invalid email address.");
+      return false;
+    }
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters.");
+      return false;
+    }
+    return true;
   };
 
-  const resetBlur = () => {
-    setBlurIntensity(50);
+  const handleLogin = () => {
+    if (!validateInputs()) return;
+
+    const auth = getAuth();
+    signInWithEmailAndPassword(auth, email, password)
+      .then((userCredential) => {
+        const user = userCredential.user;
+       // Alert.alert("Success", `Welcome back, ${user.email}!`);
+        navigation.navigate("Passcode"); // Navigate to the Home screen
+      })
+      .catch((error) => {
+        console.error("Login Error:", error); // Log the error
+        const errorMessage = error.message || "Login failed. Try again.";
+        Alert.alert("Error", errorMessage);
+      });
   };
-
-  // Interpolated border animation
-  const borderAnimation = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"], // Animate the gradient position
-  });
-
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -100,27 +121,13 @@ export default function App() {
         intensity={blurIntensity}
         style={StyleSheet.absoluteFillObject}
       />
-
-<Animated.Text
-        style={[
-          styles.logo,
-          {
-            transform: [{ scaleX: scaleAnim }], // Horizontal scale animation
-          },
-        ]}
+      <Animated.Text
+        style={[styles.logo, { transform: [{ scaleX: scaleAnim }] }]}
       >
         ZODIAC POS APPLICATION
       </Animated.Text>
-  
-
-      {/* Animated Border Overlay */}
       <Animated.View
-        style={[
-          styles.borderContainer,
-          {
-            transform: [{ scaleX: scaleAnim }], // Horizontal scale animation
-          },
-        ]}
+        style={[styles.borderContainer, { transform: [{ scaleX: scaleAnim }] }]}
       >
         <Animated.View
           style={[
@@ -128,106 +135,58 @@ export default function App() {
             {
               borderColor: borderAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: ["#2c3e50", "#1e90ff"], // Change between two colors
+                outputRange: ["#2c3e50", "#1e90ff"],
               }),
             },
           ]}
         />
-        {/* Login Box */}
         <View style={styles.loginBox}>
-          <Text style={[styles.loginHeader, { color: "#2c3e50" }]}>Log in</Text>
+          <Text style={styles.loginHeader}>Log in</Text>
           <Text style={styles.loginSubheader}>
-            Welcome to Zodiac Pos, please login
+            Welcome to Zodiac POS, please login
           </Text>
-
-          {/* Staggered Child Components */}
-          <Animated.View
-            style={{
-              opacity: componentAnim,
-              transform: [
-                {
-                  translateY: componentAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [20, 0], // Slide from below
-                  }),
-                },
-              ],
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#999"
+            value={email}
+            onChangeText={(text) => {
+              console.log("Setting Email:", text); // Debugging line
+              setEmail(text);
             }}
-          >
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#999"
-              />
-            </View>
-          </Animated.View>
-
-          <Animated.View
-            style={{
-              opacity: componentAnim,
-              transform: [
-                {
-                  translateY: componentAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [20, 0],
-                  }),
-                },
-              ],
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            value={password}
+            onChangeText={(text) => {
+              console.log("Setting Password:", text); // Debugging line
+              setPassword(text);
             }}
-          >
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#999"
-                secureTextEntry
-              />
-            </View>
-          </Animated.View>
-
+          />
           <View style={styles.optionsContainer}>
             <View style={styles.rememberMe}>
-              <View style={styles.checkboxContainer}>
-              <Checkbox  
+              <Checkbox
                 status={isRemember ? "checked" : "unchecked"}
                 onPress={() => setIsRemember(!isRemember)}
-                color="#2c3e50" 
+                color="#2c3e50"
               />
-              </View>
-              <Text style={styles.rememberText}>Remember</Text>
+              <Text style={styles.rememberText}>Remember Me</Text>
             </View>
             <TouchableOpacity>
               <Text style={styles.forgotPassword}>Forgot Password?</Text>
             </TouchableOpacity>
           </View>
-
-          <Animated.View
-            style={{
-              opacity: componentAnim, // Button fades in with componentAnim
-              transform: [
-                { scale: buttonScale }, // Scale effect
-                {
-                  translateY: componentAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [20, 0], // Slide from below
-                  }),
-                },
-              ],
-            }}
-          >
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPressIn={increaseBlur}
-              onPressOut={resetBlur}
-            >
-              <Text style={styles.continueButtonText}>Log In</Text>
-            </TouchableOpacity>
-          </Animated.View>
-
+          <TouchableOpacity style={styles.continueButton} onPress={handleLogin}>
+            <Text style={styles.continueButtonText}>Log In</Text>
+          </TouchableOpacity>
           <Text style={styles.signupText}>
             Don’t have an account?{" "}
-            <Text style={styles.signupLink}>Sign-up</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
+              <Text style={styles.signupLink}>Sign-up</Text>
+            </TouchableOpacity>
           </Text>
         </View>
       </Animated.View>
@@ -296,7 +255,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 10,
     fontSize: 14,
-    width:200,
+    width: 200,
+    marginBottom: 15,
   },
   optionsContainer: {
     width: "100%",
@@ -306,15 +266,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   checkboxContainer: {
-     backgroundColor: "#eeeeee",
-     borderRadius: 20,
+    backgroundColor: "#eeeeee",
+    borderRadius: 20,
     marginRight: 5,
-    
   },
   rememberMe: {
     flexDirection: "row",
     alignItems: "center",
-     
   },
   rememberText: {
     fontFamily: "GoogleSans",
@@ -348,5 +306,4 @@ const styles = StyleSheet.create({
     color: "#2c3e50",
     fontWeight: "600",
   },
- 
 });

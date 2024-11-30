@@ -61,7 +61,8 @@
     "react-native-svg-transformer": "^1.5.0",
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
-    "styled-components": "^6.1.13"
+    "styled-components": "^6.1.13",
+    "expo-secure-store": "~14.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -71,7 +72,6 @@
     "@types/lodash": "^4.17.10",
     "@types/qrcode": "^1.5.5",
     "@types/react": "~18.3.12",
-    "@types/react-native": "^0.72.8",
     "@types/react-native-vector-icons": "^6.4.18",
     "@types/react-test-renderer": "^18.0.7",
     "@types/uuid": "^10.0.0",

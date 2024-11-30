@@ -12,6 +12,9 @@ import OrderDetail from './OrderDetail';
 import Setting from './Setting';
 import MemberRegister from './MemberRegister';
 import Passcode from './Passcode';
+import SignUp from './SignUp';
+import CreatePasscode from './CreatePasscode';
+import DisplayPasscode from './DisplayPasscodeScreen';
  
 
 const Drawer = createDrawerNavigator();
@@ -34,8 +37,7 @@ const DrawerLayout = () => {
         ),
       })}
     >
-      
-      <Drawer.Screen
+ <Drawer.Screen
         name="login"
         options={{
           title: 'Login',
@@ -44,6 +46,36 @@ const DrawerLayout = () => {
           ),
         }}
         component={Login}  
+      />
+       <Drawer.Screen
+        name="DisplayPasscodesScreen"
+        options={{
+          title: 'DisplayPasscodesScreen',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={DisplayPasscode}  
+      />
+          <Drawer.Screen
+  name="SignUp"
+  options={{
+    title: 'Sign Up',
+    drawerIcon: ({ color, focused }) => (
+      <Ionicons name={focused ? 'log-in' : 'log-in-outline'} color={color} size={24} />
+    ),
+  }}
+  component={SignUp}
+/>
+<Drawer.Screen
+        name="CreatePasscode"
+        options={{
+          title: 'Create Passcode',
+          drawerIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+          ),
+        }}
+        component={CreatePasscode}  
       />
        <Drawer.Screen
         name="Passcode"
