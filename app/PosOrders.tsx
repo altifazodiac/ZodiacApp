@@ -250,7 +250,7 @@ const PosOrders = () => {
       >
         <View style={styles.card}>
           <View style={styles.cardImageContainer}>
-            <Image source={{ uri: item.imageUrl || "https://via.placeholder.com/100" }} style={styles.cardImage} />
+            <Image source={{ uri: item.imageUrl || "https://picsum.photos/100" }} style={styles.cardImage} />
             <View>
               <Text style={styles.cardTitle}>{item.nameDisplay}</Text>
               <Text style={styles.cardDescription}>{item.description}</Text>

@@ -30,7 +30,7 @@ import { AntDesign } from '@expo/vector-icons';
 
  
 
-const placeholderImage = 'https://via.placeholder.com/100';
+const placeholderImage = 'https://picsum.photos/100';
 const { width } = Dimensions.get('window');
 
 type Category = {

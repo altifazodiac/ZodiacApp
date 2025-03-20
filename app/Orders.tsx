@@ -30,7 +30,7 @@ import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import { database } from "../app/firebase";
-import { DatabaseReference, get, set } from "firebase/database";
+import { DatabaseReference, get, set, push, getDatabase} from "firebase/database";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import { Settings } from "../Data/types"; // Adjust the path as needed
 import FastImage from "expo-fast-image";
@@ -40,6 +40,7 @@ import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
 import { curry } from "lodash";
 import EditNoteModal from "../components/EditNoteModal";
+ 
 declare const window: any;
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -738,14 +739,14 @@ const Orders = () => {
       targetOffset = isMobile
         ? screenWidth * 0.26
         : isTablet
-        ? screenWidth * 0.14
-        : screenWidth * 0.11;
+          ? screenWidth * 0.14
+          : screenWidth * 0.11;
     } else if (type === "Delivery") {
       targetOffset = isMobile
         ? screenWidth * 0.54
         : isTablet
-        ? screenWidth * 0.29
-        : screenWidth * 0.22;
+          ? screenWidth * 0.29
+          : screenWidth * 0.22;
     }
     Animated.timing(highlightOffset, {
       toValue: targetOffset,
@@ -856,21 +857,93 @@ const Orders = () => {
       }));
     }
   };
- 
+
+
+  const saveOrderToDatabase = async (
+    orderItems: OrderItem[],
+    receiptNumber: string,
+    queueNumber: number,
+    selectedOrderType: OrderType,
+    total: number,
+    subtotal: number,
+    tax: number,
+    serviceCharge: number,
+    cashChange: number,
+    remainBalance: number,
+    selectedPaymentMethod: string[]
+  ) => {
+    try {
+      const database = getDatabase(); // Get the Firebase Realtime Database instance
+      const ordersRef = ref(database, "orders"); // Reference to the "orders" node
   
+      // Create the order data object
+      const orderData = {
+        receiptNumber,
+        queueNumber,
+        orderType: selectedOrderType,
+        items: orderItems.map((item) => ({
+          productId: item.product.id,
+          productName: item.product.nameDisplay,
+          quantity: item.quantity,
+          selectedOptions: item.selectedOptions,
+          customInput: item.customInput,
+          totalPrice:
+            item.quantity *
+            (Number(item.product.price) +
+              item.selectedOptions.reduce(
+                (sum: number, option: Option) => sum + (Number(option.price) || 0),
+                0
+              )),
+        })),
+        subtotal,
+        tax,
+        serviceCharge,
+        total,
+        cashChange,
+        remainBalance,
+        paymentMethods: selectedPaymentMethod,
+        timestamp: new Date().toISOString(), // Add a timestamp for when the order was placed
+      };
+  
+      // Push the order data to the database
+      const newOrderRef = push(ordersRef); // Generate a unique key for the new order
+      await set(newOrderRef, orderData); // Save the order data under the generated key
+  
+      console.log("Order saved successfully!");
+    } catch (error) {
+      console.error("Error saving order:", error);
+    }
+  };
+  const handleProceedToPayment = async () => {
+    await incrementReceiptNumber();
+    await incrementQueueNumber();
+  
+    if (queueNumber !== null) {
+      await saveOrderToDatabase(
+        orderItems,
+        receiptNumber,
+        queueNumber,
+        selectedOrderType,
+        total,
+        subtotal,
+        tax,
+        serviceCharge,
+        cashChange,
+        remainbalance,
+        selectedPaymentMethod
+      );
+      setOrderItems([]); // Clear the order items after saving
+    } else {
+      console.error("Queue number is not available");
+    }
+  };
   return (
     <View
       style={
         isMobile
-          ? [
-              styles.containerMobile,
-              { backgroundColor: currentTheme.backgroundColor },
-            ]
-          : [
-              styles.container,
-              { backgroundColor: currentTheme.backgroundColor },
-            ]
-      }
+        ? [styles.containerMobile, { backgroundColor: currentTheme.backgroundColor }]
+        : [styles.container, { backgroundColor: currentTheme.backgroundColor }]
+    }
     >
       <EditNoteModal
         visible={modalVisible}
@@ -1182,99 +1255,94 @@ const Orders = () => {
               ))}
             </View>
             <ScrollView>
-              {orderItems.map((item, index) => (
-                
-                <Swipeable
-                  key={item.product.id}
-                  renderRightActions={
-                    (progress, dragX) =>
-                      rightSwipeActions(progress, dragX, item.product.id, index) // Pass index here
-                  }
-                >
-                  <Animated.View
-                    style={{
-                      transform: [
-                        { translateY: animationValues[index].translateY },
-                      ],
-                      opacity: animationValues[index].opacity,
-                    }}
-                  >
-                    <View key={index} style={styles.orderItem}>
-                      <View style={styles.orderItemTextContainer}>
-                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product?.nameDisplay}{" "}
-                          {settings?.OrderPanels?.displaySize &&
-                          item.product?.productSize
-                            ? ` (${item.product.productSize})`
-                            : ""}
-                        </Text>
+  {orderItems.map((item, index) => (
+    <Swipeable
+      key={item.product.id}
+      renderRightActions={(progress, dragX) =>
+        rightSwipeActions(progress, dragX, item.product.id, index)
+      }
+    >
+      <Animated.View
+        style={{
+          transform: [{ translateY: animationValues[index].translateY }],
+          opacity: animationValues[index].opacity,
+        }}
+      >
+        <View style={styles.orderItem}>
+          <View style={styles.orderItemTextContainer}>
+            {/* Product Name */}
+            <Text style={{ fontFamily: "Kanit-Regular" }}>
+              {item.product.nameDisplay}
+              {settings?.OrderPanels?.displaySize && item.product?.productSize
+                ? ` (${item.product.productSize})`
+                : ""}
+            </Text>
 
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
-                              >
-                                ({option.name})
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                        {/* Display customInput if it exists */}
+            {/* Selected Options */}
+            {item.selectedOptions.length > 0 && (
+              <View style={styles.optionsPriceContainer}>
+                {item.selectedOptions.map((option, idx) => (
+                  <Text key={idx} style={styles.optionPriceTextItem}>
+                    ({option.name})
+                  </Text>
+                ))}
+              </View>
+            )}
 
-                        {item.customInput && (
-                          <Text
-                            style={[
-                              { fontFamily: "Kanit-Regular", color: "#263c48" },
-                            ]}
-                          >
-                            Note: {item.customInput}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.orderItemQuantityContainer}>
-                        <Text
-                          style={[
-                            {
-                              fontFamily: "GoogleSans",
-                              color: "#3a5565",
-                              fontSize: 14,
-                            },
-                          ]}
-                        >
-                          {item.quantity} x{" "}
-                          {parseFloat(item.product.price).toFixed(0)}฿
-                        </Text>
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
-                              >
-                                (+{option.price.toFixed(0)}฿)
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.orderItemPrice}>
-                        {(
-                          item.quantity *
-                          (parseFloat(item.product.price) +
-                            item.selectedOptions.reduce(
-                              (sum, option) => sum + option.price,
-                              0
-                            ))
-                        ).toFixed(0)}
-                        ฿
-                      </Text>
-                    </View>
-                  </Animated.View>
-                </Swipeable>
-              ))}
-            </ScrollView>
+            {/* Custom Input Note */}
+            {item.customInput && (
+              <Text
+                style={{
+                  fontFamily: "Kanit-Regular",
+                  color: "#263c48",
+                }}
+              >
+                Note: {item.customInput}
+              </Text>
+            )}
+          </View>
+
+          {/* Quantity & Price */}
+          <View style={styles.orderItemQuantityContainer}>
+            <Text
+              style={{
+                fontFamily: "GoogleSans",
+                color: "#3a5565",
+                fontSize: 14,
+              }}
+            >
+              {item.quantity} x {parseFloat(item.product.price).toFixed(0)}฿
+            </Text>
+
+            {item.selectedOptions.length > 0 && (
+              <View style={styles.optionsPriceContainer}>
+                {item.selectedOptions.map((option, idx) => (
+                  <Text key={idx} style={styles.optionPriceTextItem}>
+                    (+{option.price.toFixed(0)}฿)
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Total Price */}
+          <Text style={styles.orderItemPrice}>
+            {(
+              item.quantity *
+              (parseFloat(item.product.price) +
+                item.selectedOptions.reduce(
+                  (sum, option) => sum + option.price,
+                  0
+                ))
+            ).toFixed(0)}
+            ฿
+          </Text>
+        </View>
+      </Animated.View>
+    </Swipeable>
+  ))}
+</ScrollView>
+
             <View style={styles.orderTotalContainer}>
               {/* Total Quantity */}
               <View style={styles.orderTotalRow}>
@@ -1440,10 +1508,7 @@ const Orders = () => {
 
                 <TouchableOpacity
                   style={styles.proceedButton}
-                  onPress={() => {
-                    incrementReceiptNumber();
-                    incrementQueueNumber();
-                  }}
+                  onPress={handleProceedToPayment}
                 >
                   <Text style={styles.proceedButtonText}>
                     Proceed to Payment
@@ -1458,490 +1523,167 @@ const Orders = () => {
         </Animated.View>
       )}
 
-      {!isMobile && (
-        <View style={styles.layout2}>
-          <View style={styles.orderSummaryContainer}>
-            <View style={styles.orderSummaryTitleContainer}>
-              <Text
-                style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
-              >
-                Order List
-              </Text>
-            </View>
-            <View style={styles.orderHeader}>
-              <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderReceiptText}>
-                  {" "}
-                  #{receiptNumber}
-                </Text>
-              </View>
-              <View style={styles.orderHeaderGroup}>
-                <Text style={styles.orderHeaderReceiptText}>
-                  {" "}
-                  Queue: #{queueNumber}
-                </Text>
-              </View>
-              <View style={styles.orderHeaderGroup}>
-                <TouchableOpacity
-                  style={[styles.circleButton, { marginRight: 5 }]}
-                >
-                  <AntDesign name="printer" size={16} color="black" />
-                </TouchableOpacity>
+{!isMobile && (
+  <View style={styles.layout2}>
+    <View style={styles.orderSummaryContainer}>
+      {/* Order List Title */}
+      <View style={styles.orderSummaryTitleContainer}>
+        <Text style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}>
+          Order List
+        </Text>
+      </View>
 
-                <TouchableOpacity
-                  style={styles.circleButton}
-                  onPress={confirmClearOrderItems}
-                >
-                  <Ionicons name="trash-outline" size={16} color="#E21818" />
-                </TouchableOpacity>
-              </View>
-            </View>
+      {/* Order Header */}
+      <View style={styles.orderHeader}>
+        <View style={styles.orderHeaderGroup}>
+          <Text style={styles.orderHeaderReceiptText}>#{receiptNumber}</Text>
+        </View>
+        <View style={styles.orderHeaderGroup}>
+          <Text style={styles.orderHeaderReceiptText}>Queue: #{queueNumber}</Text>
+        </View>
+        <View style={styles.orderHeaderGroup}>
+          <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
+            <AntDesign name="printer" size={16} color="black" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.circleButton} onPress={confirmClearOrderItems}>
+            <Ionicons name="trash-outline" size={16} color="#E21818" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-            <View style={styles.orderHeader}>
-              <View style={styles.orderHeaderGroup}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={18}
-                  color={"#3c5867"}
-                />
-                <Text style={styles.orderHeaderText}> Cashier 1</Text>
-              </View>
-              <View style={styles.orderHeaderGroup}>
-                <Ionicons name="calendar-outline" size={18} color={"#3c5867"} />
-                <Text style={styles.dateText}> {formattedDate}</Text>
-              </View>
-              <View style={styles.orderHeaderGroup}>
-                <Ionicons name="time-outline" size={18} color={"#3c5867"} />
-                <View style={styles.timeContainer}>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimHour,
-                        transform: [{ translateY: translateYAnimHour }],
-                      },
-                    ]}
-                  >
-                    {hour}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimMinute,
-                        transform: [{ translateY: translateYAnimMinute }],
-                      },
-                    ]}
-                  >
-                    {minute}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimSecond,
-                        transform: [{ translateY: translateYAnimSecond }],
-                      },
-                    ]}
-                  >
-                    {second}
-                  </Animated.Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.orderHeaderTabs}>
-              <Animated.View
-                style={{
-                  ...styles.highlight,
-                  transform: [
-                    {
-                      translateX: highlightOffset.interpolate({
-                        inputRange: [0, 100], // Assuming max offset is 100
-                        outputRange: [0, 100], // Map to percentages for responsiveness
-                      }),
-                    },
-                  ],
-                }}
-              />
-              {["Dine In", "Take Away", "Delivery"].map((type: string) => (
-                <TouchableOpacity
-                  key={type}
-                  style={styles.buttonHeader}
-                  onPress={() => handleSelect(type as OrderType)}
-                >
-                  <Text
-                    style={[
-                      styles.buttonHeaderText,
-                      selectedOrderType === type && styles.selectedText,
-                    ]}
-                  >
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <ScrollView>
-              {orderItems.map((item, index) => (
-                <Swipeable
-                  key={item.product.id}
-                  renderRightActions={(progress, dragX) => (
-                    <Animated.View
-                      style={{
-                        transform: [
-                          {
-                            scale: dragX.interpolate({
-                              inputRange: [-100, 0],
-                              outputRange: [1, 0.5],
-                              extrapolate: "clamp",
-                            }),
-                          },
-                        ],
-                      }}
-                    >
-                      <View style={styles.rightActionContainer}>
-                        <TouchableOpacity
-                          style={[styles.rightAction, currentTheme.button]}
-                          onPress={() => openEditModal(index)}
-                        >
-                          <Text style={[styles.actionText, { color: "white" }]}>
-                            Add Note
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.rightAction, currentTheme.button]}
-                          onPress={() => handleDiscountToggle(index)}
-                        >
-                          <Text style={[styles.actionText, { color: "white" }]}>
-                            Discount
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.rightAction,
-                            { backgroundColor: "#FF0000" },
-                          ]}
-                          onPress={() => removeItemFromOrder(item.product.id)}
-                        >
-                          <Text style={[styles.actionText, { color: "white" }]}>
-                            Remove
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </Animated.View>
-                  )}
-                >
-                  <Animated.View
-                    style={{
-                      transform: [
-                        { translateY: animationValues[index]?.translateY || 0 },
-                      ],
-                      opacity: animationValues[index]?.opacity || 1,
-                    }}
-                  >
-                    <View key={index} style={styles.orderItem}>
-                      <View style={styles.orderItemTextContainer}>
-                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                          {item.product?.nameDisplay}{" "}
-                          {settings?.OrderPanels?.displaySize &&
-                          item.product?.productSize
-                            ? ` (${item.product.productSize})`
-                            : ""}
-                        </Text>
-                        <View>
-                          {item.selectedOptions.length > 0 && (
-                            <View style={styles.optionsPriceContainer}>
-                              {item.selectedOptions.map((option, idx) => (
-                                <Text
-                                  key={idx}
-                                  style={styles.optionPriceTextItem}
-                                >
-                                  ({option.name})
-                                </Text>
-                              ))}
-                            </View>
-                          )}
-                          {item.customInput && (
-                            <Text
-                              style={[
-                                {
-                                  fontFamily: "Kanit-Regular",
-                                  color: "#4682B4",
-                                },
-                              ]}
-                            >
-                              Note: {item.customInput}
-                            </Text>
-                          )}
-                          {visibleDiscountInput === index && inputVisible && (
-                            <View style={styles.discountInputContainer}>
-                              <TextInput
-                                style={[
-                                  styles.discountInput,
-                                  inputErrors[index] && {
-                                    backgroundColor: "#ffe6e6",
-                                  },
-                                ]}
-                                placeholder="Enter discount"
-                                placeholderTextColor="#888"
-                                keyboardType="numeric"
-                                value={discounts[index] || ""}
-                                onChangeText={(value) =>
-                                  handleDiscountChange(value, index)
-                                }
-                              />
-                              {inputErrors[index] && (
-                                <Text
-                                  style={{
-                                    color: "red",
-                                    fontSize: 12,
-                                    marginLeft: 10,
-                                  }}
-                                >
-                                  {inputErrors[index]}
-                                </Text>
-                              )}
-                              <TouchableOpacity
-                                style={[
-                                  styles.saveButton,
-                                  savedDiscounts[index]
-                                    ? { backgroundColor: "#4682B4" }
-                                    : { backgroundColor: "#f9f9f9" },
-                                ]}
-                                onPress={() => handleSaveDiscount(index)}
-                              >
-                                <Text
-                                  style={[
-                                    styles.saveButtonText, // Using the saveButtonText style here
-                                    {
-                                      color: savedDiscounts[index]
-                                        ? "#fff"
-                                        : "#333",
-                                    },
-                                  ]}
-                                >
-                                  {savedDiscounts[index]
-                                    ? "Remove Discount"
-                                    : "Save Discount"}
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                      <View style={styles.orderItemQuantityContainer}>
-                        <Text
-                          style={[
-                            {
-                              fontFamily: "GoogleSans",
-                              color: "#3a5565",
-                              fontSize: 14,
-                            },
-                          ]}
-                        >
-                          {item.quantity} x{" "}
-                          {parseFloat(item.product.price).toFixed(0)}฿
-                        </Text>
-                        {item.selectedOptions.length > 0 && (
-                          <View style={styles.optionsPriceContainer}>
-                            {item.selectedOptions.map((option, idx) => (
-                              <Text
-                                key={idx}
-                                style={styles.optionPriceTextItem}
-                              >
-                                (+{option.price.toFixed(0)}฿)
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-
-                      <Text style={styles.orderItemPrice}>
-                        {getDiscountedPrice(item, index)}฿
-                      </Text>
-                    </View>
-                  </Animated.View>
-                </Swipeable>
-              ))}
-            </ScrollView>
-            <View style={styles.orderTotalContainer}>
-              {/* Total Quantity */}
-              <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>
-                  Total Quantity:
-                </Text>
-                <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
-                >
-                  {orderItems.reduce((sum, item) => sum + item.quantity, 0)}
-                </Text>
-              </View>
-
-              {/* Subtotal */}
-              <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Subtotal:</Text>
-                <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
-                >
-                  {subtotal.toFixed(0)}฿
-                </Text>
-              </View>
-
-              {/* Discount */}
-              {settings?.OrderPanels.displayDiscount && (
-                <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans", color: "#3a5565" }}>
-                    Discount:
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: "GoogleSans",
-                      textAlign: "right",
-                      color: "#3a5565",
-                    }}
-                  >
-                    {discountValue}
-                  </Text>
-                </View>
-              )}
-              {/* Tax */}
-              {settings?.OrderPanels.displayTax && (
-                <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>
-                    Tax ({(settings?.OrderPanels.taxValue * 100).toFixed(0)}%):
-                  </Text>
-                  <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
-                  >
-                    {tax.toFixed(0)}฿
-                  </Text>
-                </View>
-              )}
-
-              {/* Service Charge */}
-              {settings?.OrderPanels.displayServiceCharge && (
-                <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>
-                    Service Charge (
-                    {(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}
-                    %):
-                  </Text>
-                  <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
-                  >
-                    {serviceCharge.toFixed(0)}฿
-                  </Text>
-                </View>
-              )}
-              {selectedPaymentMethod.length > 0 && (
-                <>
-                  {/* Primary Payment Method */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans" }}>
-                      Payment Method:
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans",
-                        textAlign: "right",
-                        fontSize: 14,
-                        color: "#3a5565",
-                      }}
-                    >
-                      {selectedPaymentMethod[0] || "N/A"}
-                      {selectedPaymentMethod[0] === "Cash"
-                        ? ` (${cashChange?.toFixed(0)}฿)`
-                        : ` (${total?.toFixed(0)}฿)`}
-                    </Text>
-                  </View>
-
-                  {/* Secondary Payment Method, if present */}
-                  {selectedPaymentMethod.length > 1 && (
-                    <View style={styles.orderTotalRow}>
-                      <Text style={{ fontFamily: "GoogleSans" }}>
-                        Payment Method 2:
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: "GoogleSans",
-                          textAlign: "right",
-                          fontSize: 14,
-                          color: "#3a5565",
-                        }}
-                      >
-                        {selectedPaymentMethod[1]}
-                        {selectedPaymentMethod[1] === "Cash"
-                          ? ` (${cashChange?.toFixed(0)}฿)`
-                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Change */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans",
-                        textAlign: "right",
-                        fontSize: 14,
-                      }}
-                    >
-                      {remainbalance?.toFixed(0)}฿
-                    </Text>
-                  </View>
-                </>
-              )}
-
-              {/* Total */}
-              <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
-                <Text
-                  style={[
-                    {
-                      fontFamily: "GoogleSans",
-                      textAlign: "right",
-                      fontSize: 18,
-                      fontWeight: "bold",
-                    },
-                  ]}
-                >
-                  {total.toFixed(0)}฿
-                </Text>
-              </View>
-              {total > 0 && (
-                <Animated.View
-                  style={{
-                    opacity: opacity,
-                    transform: [{ translateY: translateY }],
-                  }}
-                >
-                  {/* Secondary Payment Option if cashChange < total */}
-                  {cashChange < total && (
-                    <PaymentMethodSelector
-                      onMethodSelect={handleMethodSelect}
-                      handleOpenDialer={handleOpenDialer}
-                      handleOpenQrDialer={handleQrOpenDialer}
-                    />
-                  )}
-                  <TouchableOpacity
-                    style={styles.proceedButton}
-                    onPress={() => {
-                      incrementReceiptNumber();
-                      incrementQueueNumber();
-                    }}
-                  >
-                    <Text style={styles.proceedButtonText}>
-                      Proceed to Payment
-                    </Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-            </View>
+      {/* Order Details */}
+      <View style={styles.orderHeader}>
+        <View style={styles.orderHeaderGroup}>
+          <Ionicons name="person-circle-outline" size={18} color="#3c5867" />
+          <Text style={styles.orderHeaderText}> Cashier 1</Text>
+        </View>
+        <View style={styles.orderHeaderGroup}>
+          <Ionicons name="calendar-outline" size={18} color="#3c5867" />
+          <Text style={styles.dateText}>{formattedDate}</Text>
+        </View>
+        <View style={styles.orderHeaderGroup}>
+          <Ionicons name="time-outline" size={18} color="#3c5867" />
+          <View style={styles.timeContainer}>
+            <Animated.Text style={[styles.timeText, { opacity: fadeAnimHour, transform: [{ translateY: translateYAnimHour }] }]}>
+              {hour}
+            </Animated.Text>
+            <Text style={styles.timeSeparator}>:</Text>
+            <Animated.Text style={[styles.timeText, { opacity: fadeAnimMinute, transform: [{ translateY: translateYAnimMinute }] }]}>
+              {minute}
+            </Animated.Text>
+            <Text style={styles.timeSeparator}>:</Text>
+            <Animated.Text style={[styles.timeText, { opacity: fadeAnimSecond, transform: [{ translateY: translateYAnimSecond }] }]}>
+              {second}
+            </Animated.Text>
           </View>
         </View>
-      )}
+      </View>
+
+      {/* Order Type Tabs */}
+      <View style={styles.orderHeaderTabs}>
+        <Animated.View
+          style={{
+            ...styles.highlight,
+            transform: [{ translateX: highlightOffset.interpolate({ inputRange: [0, 100], outputRange: [0, 100] }) }],
+          }}
+        />
+        {["Dine In", "Take Away", "Delivery"].map((type) => (
+          <TouchableOpacity key={type} style={styles.buttonHeader} onPress={() => handleSelect(type as OrderType)}>
+            <Text style={[styles.buttonHeaderText, selectedOrderType === type && styles.selectedText]}>{type}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Order Items List */}
+      <ScrollView>
+        {orderItems.map((item, index) => (
+          <Swipeable
+            key={item.product.id}
+            renderRightActions={(progress, dragX) => (
+              <Animated.View
+                style={{
+                  transform: [{ scale: dragX.interpolate({ inputRange: [-100, 0], outputRange: [1, 0.5], extrapolate: "clamp" }) }],
+                }}
+              >
+                <View style={styles.rightActionContainer}>
+                  <TouchableOpacity style={[styles.rightAction, currentTheme.button]} onPress={() => openEditModal(index)}>
+                    <Text style={[styles.actionText, { color: "white" }]}>Add Note</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.rightAction, currentTheme.button]} onPress={() => handleDiscountToggle(index)}>
+                    <Text style={[styles.actionText, { color: "white" }]}>Discount</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.rightAction, { backgroundColor: "#FF0000" }]} onPress={() => removeItemFromOrder(item.product.id)}>
+                    <Text style={[styles.actionText, { color: "white" }]}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            )}
+          >
+            <Animated.View
+              style={{
+                transform: [{ translateY: animationValues[index]?.translateY || 0 }],
+                opacity: animationValues[index]?.opacity || 1,
+              }}
+            >
+              <View style={styles.orderItem}>
+                <View style={styles.orderItemTextContainer}>
+                  <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                    {item.product.nameDisplay}
+                    {settings?.OrderPanels?.displaySize && item.product?.productSize ? ` (${item.product.productSize})` : ""}
+                  </Text>
+
+                  {item.selectedOptions.length > 0 && (
+                    <View style={styles.optionsPriceContainer}>
+                      {item.selectedOptions.map((option, idx) => (
+                        <Text key={idx} style={styles.optionPriceTextItem}>({option.name})</Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {item.customInput && (
+                    <Text style={[{ fontFamily: "Kanit-Regular", color: "#4682B4" }]}>
+                      Note: {item.customInput}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.orderItemQuantityContainer}>
+                  <Text style={[{ fontFamily: "GoogleSans", color: "#3a5565", fontSize: 14 }]}>
+                    {item.quantity} x {parseFloat(item.product.price).toFixed(0)}฿
+                  </Text>
+                </View>
+
+                <Text style={styles.orderItemPrice}>{getDiscountedPrice(item, index)}฿</Text>
+              </View>
+            </Animated.View>
+          </Swipeable>
+        ))}
+      </ScrollView>
+
+      {/* Order Summary */}
+      <View style={styles.orderTotalContainer}>
+        <View style={styles.orderTotalRow}>
+          <Text style={[{ fontFamily: "GoogleSans" }]}>Total Quantity:</Text>
+          <Text style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}>{orderItems.reduce((sum, item) => sum + item.quantity, 0)}</Text>
+        </View>
+
+        <View style={styles.orderTotalRow}>
+          <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
+          <Text style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}>{total.toFixed(0)}฿</Text>
+        </View>
+
+        {total > 0 && (
+          <Animated.View style={{ opacity: opacity, transform: [{ translateY: translateY }] }}>
+            <TouchableOpacity style={styles.proceedButton} onPress={() => { incrementReceiptNumber(); incrementQueueNumber(); }}>
+              <Text style={styles.proceedButtonText}>Proceed to Payment</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </View>
+    </View>
+  </View>
+)}
+
     </View>
   );
 };
@@ -1957,19 +1699,19 @@ const styles = StyleSheet.create({
         width: "100%",
       }
     : isTablet
-    ? {
-        flexDirection: "row", // Horizontal layout for tablets
-        justifyContent: "space-between", // Adjust space between containers for tablets
-        paddingHorizontal: 15, // Add padding for better layout on tablets
-        width: "100%",
-        height: "100%",
-      }
-    : {
-        flexDirection: "row", // Horizontal layout for larger screens (desktops or large tablets)
-        width: "100%",
-        height: "100%",
-        paddingHorizontal: 20, // Larger padding for bigger screens
-      },
+      ? {
+          flexDirection: "row", // Horizontal layout for tablets
+          justifyContent: "space-between", // Adjust space between containers for tablets
+          paddingHorizontal: 15, // Add padding for better layout on tablets
+          width: "100%",
+          height: "100%",
+        }
+      : {
+          flexDirection: "row", // Horizontal layout for larger screens (desktops or large tablets)
+          width: "100%",
+          height: "100%",
+          paddingHorizontal: 20, // Larger padding for bigger screens
+        },
   containerMobile: {
     flex: 1,
     padding: 10,

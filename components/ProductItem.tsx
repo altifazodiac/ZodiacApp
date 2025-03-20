@@ -105,7 +105,7 @@ const ProductItem: React.FC<Props> = ({
         )}
         <View style={styles.cardImageContainer}>
           <FastImage
-            source={{ uri: item.imageUrl || "https://via.placeholder.com/100" }}
+            source={{ uri: item.imageUrl || "https://picsum.photos/100" }}
             style={styles.cardImage}
             cacheKey={item.id} // Cache key for offline support
           />
