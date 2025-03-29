@@ -16,7 +16,7 @@ import {
   Modal,
   SafeAreaView,
 } from "react-native";
-import { database } from "./firebase";
+import { database } from "../utils/firebase";
 import { onValue, ref, set } from "firebase/database";
 import { Picker } from "@react-native-picker/picker";
 

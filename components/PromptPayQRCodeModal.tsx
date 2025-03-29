@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing, Image  } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing, Image } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
- 
+const generatePayload = require('promptpay-qr');
 
 interface PromptPayQRCodeModalProps {
   visible: boolean;
@@ -25,17 +25,15 @@ const PromptPayQRCodeModal: React.FC<PromptPayQRCodeModalProps> = ({ visible, mo
   }, [visible, mobileNumber, amount]);
 
   const generatePromptPayQRCode = () => {
-    const formattedMobileNumber = formatMobileNumber(mobileNumber);
-    const qrCodeData = `00020101021129370016A000000677010111${formattedMobileNumber}5802TH5303764${formatAmount(amount)}6304`;
-    setQRCodeValue(qrCodeData);
-  };
+    console.log('amount type:', typeof amount);
+    console.log('amount value:', amount);
+    console.log('mobileNumber', mobileNumber);
 
-  const formatMobileNumber = (number: string) => {
-    return `0066${number.slice(1)}`;
-  };
+    const payload = generatePayload(mobileNumber, { amount });
 
-  const formatAmount = (amount: number) => {
-    return amount.toFixed(2).replace('.', '');
+    console.log('qrCodeData:', payload); // ตรวจสอบค่า Payload
+
+    setQRCodeValue(payload);
   };
 
   const fadeInModal = () => {
@@ -75,7 +73,7 @@ const PromptPayQRCodeModal: React.FC<PromptPayQRCodeModalProps> = ({ visible, mo
   const handleClose = () => {
     fadeOutModal();
     setTimeout(() => {
-      setQRCodeValue(null); // Reset QR code value when closing
+      setQRCodeValue(null);
       onClose();
     }, 500);
   };
@@ -83,18 +81,14 @@ const PromptPayQRCodeModal: React.FC<PromptPayQRCodeModalProps> = ({ visible, mo
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={handleClose}>
       <Animated.View style={[styles.modalBackground, { opacity: opacityAnim }]}>
-        <Animated.View
-          style={[styles.modalContainer, { transform: [{ translateY: translateYAnim }] }]}
-        >
-          {/* Top-right close button */}
+        <Animated.View style={[styles.modalContainer, { transform: [{ translateY: translateYAnim }] }]}>
           <TouchableOpacity style={styles.topRightCloseButton} onPress={handleClose}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
-           <Image source={require('../assets/images/thai_qr_payment.png')} style={styles.image} />
+          <Image source={require('../assets/images/thai_qr_payment.png')} style={styles.image} />
           {qrCodeValue && <QRCode value={qrCodeValue} size={200} />}
           <Text style={styles.subtitle}>Pay {amount.toFixed(2)} THB</Text>
-          <Text style={styles.subtitleII}> To {mobileNumber}</Text>
-          {/* Bottom close button if needed */}
+          <Text style={styles.subtitleII}>To {mobileNumber}</Text>
           <TouchableOpacity style={styles.bottomCloseButton} onPress={handleClose}>
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
@@ -118,24 +112,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  title: {
-    fontFamily: "GoogleSans",
-    fontSize: 24,
-    marginBottom: 10,
-    textAlign: "center",
-    color: "#666",
-  },
   subtitle: {
-    fontFamily: "GoogleSans",
     fontSize: 16,
     color: 'gray',
     marginTop: 20,
   },
   subtitleII: {
-    fontFamily: "GoogleSans",
     fontSize: 16,
     color: 'gray',
-    
   },
   topRightCloseButton: {
     position: 'absolute',
@@ -151,13 +135,18 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   closeButtonText: {
-     fontWeight: 'bold',
+    fontWeight: 'bold',
     fontSize: 16,
   },
   image: {
     width: 200,
     height: 80,
     resizeMode: 'contain',
+    marginTop: 20,
+  },
+  qrCode: {
+    width: 200,
+    height: 200,
     marginTop: 20,
   },
 });

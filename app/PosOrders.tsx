@@ -17,7 +17,7 @@ import {
   ScrollView as RNScrollView,
 } from "react-native";
 
-import { db, ref, onValue } from "./firebase";
+import { db, ref, onValue } from "../utils/firebase";
 import { Ionicons } from "@expo/vector-icons";
 import { AntDesign } from "@expo/vector-icons";
  
@@ -936,10 +936,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: isMobile ? 10 : 15, // Reduce padding on mobile
     margin: isMobile ? 5 : 10, // Reduce margin on mobile
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.23,
-    shadowRadius: 2.62,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     width: isMobile ? 180 : 250, // Smaller width on mobile
   },
   cardImageContainer: {
@@ -1014,9 +1011,7 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: "#fff",
     borderRadius: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 1 },
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     marginBottom: 10,
   },
   orderSummaryTitle: {
@@ -1079,9 +1074,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#fff",
     borderRadius: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 1 },
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     marginBottom: 10,
   },
   scrollViewContent: {

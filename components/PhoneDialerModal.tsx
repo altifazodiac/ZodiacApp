@@ -11,14 +11,12 @@ import {
   Dimensions,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-
 import { MaterialIcons } from "@expo/vector-icons";
- 
 
 interface PhoneDialerModalProps {
   visible: boolean;
   total: number;
-  cashChange: number; // Add cashChange prop
+  cashChange: number;
   onMoneyChanged: (value: number) => void;
   onCashChanged: (value: number) => void;
   onClose: () => void;
@@ -32,7 +30,7 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
   onMoneyChanged,
   onCashChanged,
 }) => {
-  const [numberValue, setNumberValue] = useState<string>(cashChange.toString()); // Initialize with cashChange
+  const [numberValue, setNumberValue] = useState<string>(cashChange.toString());
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(300)).current;
 
@@ -86,115 +84,105 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
         useNativeDriver: true,
       }),
     ]).start();
-    // Delay closing modal until animations complete
-    setTimeout(onClose, 300); // Adjust time to match the animation duration
+    setTimeout(onClose, 300);
   };
 
   const dialPadButtons = [
-    { digit: "1", letters: "" },
-    { digit: "2", letters: "ABC" },
-    { digit: "3", letters: "DEF" },
-    { digit: "100", letters: "CASH" },
-    { digit: "4", letters: "GHI" },
-    { digit: "5", letters: "JKL" },
-    { digit: "6", letters: "MNO" },
-    { digit: "500", letters: "CASH" },
-    { digit: "7", letters: "PQRS" },
-    { digit: "8", letters: "TUV" },
-    { digit: "9", letters: "WXYZ" },
-    { digit: "1000", letters: "CASH" },
-    { digit: "C", letters: "" },
-    { digit: "0", letters: "" },
-    { digit: "00", letters: "" },
-    { digit: "Del", letters: "" },
+    { digit: "1", letters: "", type: "number" },
+    { digit: "2", letters: "ABC", type: "number" },
+    { digit: "3", letters: "DEF", type: "number" },
+    { digit: "100", letters: "CASH", type: "cash" },
+    { digit: "4", letters: "GHI", type: "number" },
+    { digit: "5", letters: "JKL", type: "number" },
+    { digit: "6", letters: "MNO", type: "number" },
+    { digit: "500", letters: "CASH", type: "cash" },
+    { digit: "7", letters: "PQRS", type: "number" },
+    { digit: "8", letters: "TUV", type: "number" },
+    { digit: "9", letters: "WXYZ", type: "number" },
+    { digit: "1000", letters: "CASH", type: "cash" },
+    { digit: "C", letters: "", type: "function" },
+    { digit: "0", letters: "", type: "number" },
+    { digit: "00", letters: "", type: "number" },
+    { digit: "Del", letters: "", type: "function" },
   ];
 
-  // Calculate cashChange and moneyChanged when numberValue changes
   useEffect(() => {
     const parsedValue = parseInt(numberValue) || 0;
     const calculatedMoneyChanged = parsedValue - total;
-
-    onCashChanged(parsedValue); // Sync parsedValue to cashChange in Orders.tsx
-    onMoneyChanged(calculatedMoneyChanged); // Update moneyChanged in Orders.tsx
+    onCashChanged(parsedValue);
+    onMoneyChanged(calculatedMoneyChanged);
   }, [numberValue, total]);
 
-  // Function to handle button presses
   const handleButtonPress = (digit: string) => {
     if (digit === "C") {
-      setNumberValue(""); // Clear the entire input
+      setNumberValue("");
     } else if (digit === "Del") {
-      setNumberValue((prev) => prev.slice(0, -1)); // Delete the last character
+      setNumberValue((prev) => prev.slice(0, -1));
     } else if (digit === "100" || digit === "500" || digit === "1000") {
       const addedValue = parseInt(digit);
-      setNumberValue((prev) => (parseInt(prev) || 0) + addedValue + ""); // Convert back to string
+      setNumberValue((prev) => (parseInt(prev) || 0) + addedValue + "");
     } else {
-      setNumberValue((prev) => prev + digit); // Append digit to the current number
+      setNumberValue((prev) => prev + digit);
     }
   };
 
   return (
     <Modal transparent={true} visible={visible} onRequestClose={onClose} animationType="none">
-       <Animated.View style={[styles.modalBackground, { opacity: opacityAnim }]}>
+      <Animated.View style={[styles.modalBackground, { opacity: opacityAnim }]}>
         <Animated.View
           style={[styles.modalContainer, { transform: [{ translateY: translateYAnim }] }]}
         >
-          {/* Top-right close button */}
           <TouchableOpacity style={styles.topRightCloseButton} onPress={handleClose}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
+          
           <Text style={styles.title}>Add Cash Payment</Text>
-          <Text
-            style={[
-              styles.phoneNumber,
-              { color: parseInt(numberValue) >= total ? "green" : "#3a5665" }, // Conditional color
-            ]}
-          >
-            {numberValue}
-            {numberValue ? "฿" : ""}
+          
+          <Text style={[styles.phoneNumber, { color: parseInt(numberValue) >= total ? "green" : "#3a5665" }]}>
+            {numberValue || "0"}฿
           </Text>
+          
           <Text style={styles.callingText}>
-            {"Total: "}
-            {total.toFixed(0)}
-            {"฿"}
+            Total: {total}฿ {" "}
             {parseInt(numberValue) > total ? (
               <Text style={{ color: "green" }}>
-                {" "}
-                (Change: {(parseInt(numberValue) - total).toFixed(0)}฿)
+                (Change: {parseInt(numberValue) - total}฿)
               </Text>
             ) : (
               <Text style={{ color: "red" }}>
-                {" "}
-                (Remaining: {(cashChange - total).toFixed(0)}฿)
+                (Remaining: {total - (parseInt(numberValue) || 0)}฿)
               </Text>
             )}
           </Text>
+          
           <View style={styles.dialPad}>
             {dialPadButtons.map((button, index) => (
               <DialButton
                 key={index}
                 digit={button.digit}
                 letters={button.letters}
+                type={button.type}
                 onPress={() => handleButtonPress(button.digit)}
               />
             ))}
           </View>
+          
           <TouchableOpacity style={styles.SubmitButton} onPress={handleClose}>
-           <MaterialIcons name="currency-exchange" size={22} color="white"/>
-           <Text style={styles.SubmitButtonText}>Cash {parseInt(numberValue).toFixed(0)}{" ฿"}</Text>
+            <MaterialIcons name="currency-exchange" size={22} color="white"/>
+            <Text style={styles.SubmitButtonText}>Cash {numberValue || "0"}฿</Text>
           </TouchableOpacity>
         </Animated.View>
       </Animated.View>
     </Modal>
-    
   );
 };
 
-// DialButton component with haptic feedback
 const DialButton: React.FC<{
   digit: string;
   letters: string;
+  type: string;
   onPress: () => void;
-}> = ({ digit, letters, onPress }) => {
+}> = ({ digit, letters, type, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
@@ -229,48 +217,54 @@ const DialButton: React.FC<{
         useNativeDriver: true,
       }),
     ]).start();
-
-    onPress(); // Trigger the onPress callback after animation
+    onPress();
   };
 
-  const textColor =
-    digit === "100" || digit === "500" || digit === "1000"
-      ? "#696e70"
-      : digit === "Del"
-      ? "red"
-      : "#333";
-      const BGColor =
-    digit === "100" || digit === "500" || digit === "1000"
-      ? "#d0dce1"
-      : digit === "Del"
-      ? "#ffdede"
-      : "#f3f7f9";
+  const getButtonStyle = () => {
+    switch(type) {
+      case "cash":
+        return { backgroundColor: "#d0e3f0", borderColor: "#a8c6e0" };
+      case "function":
+        if (digit === "Del") {
+          return { backgroundColor: "#ffebee", borderColor: "#ffcdd2" };
+        }
+        return { backgroundColor: "#e0e0e0", borderColor: "#bdbdbd" };
+      default:
+        return { backgroundColor: "#f5f5f5", borderColor: "#e0e0e0" };
+    }
+  };
+
+  const getTextStyle = () => {
+    switch(type) {
+      case "cash":
+        return { color: "#1976d2" };
+      case "function":
+        if (digit === "Del") {
+          return { color: "#d32f2f" };
+        }
+        return { color: "#424242" };
+      default:
+        return { color: "#212121" };
+    }
+  };
 
   return (
-    <Animated.View
-      style={[
-        styles.dialButton,
-        { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
-      ]}
-    >
+    <Animated.View style={[styles.dialButton, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
       <TouchableOpacity
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[styles.dialButtonInner, {backgroundColor: BGColor}]}
+        style={[styles.dialButtonInner, getButtonStyle()]}
       >
-        <Text style={[styles.dialButtonText, { color: textColor }]}>
-          {digit}
-        </Text>
-        {letters ? <Text style={styles.letterText}>{letters}</Text> : null}
+        <Text style={[styles.dialButtonText, getTextStyle()]}>{digit}</Text>
+        {letters ? <Text style={[styles.letterText, { color: getTextStyle().color }]}>{letters}</Text> : null}
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
 const windowWidth = Dimensions.get("window").width;
-const windowHeight = Dimensions.get("window").height;
-const isMobile = windowWidth <= 768;
-const isTablet = windowWidth > 768 && windowWidth <= 1024;
+const isSmallPhone = windowWidth <= 375; // iPhone 8
+const isMediumPhone = windowWidth > 375 && windowWidth <= 414; // iPhone 13 Pro Max
 
 const styles = StyleSheet.create({
   modalBackground: {
@@ -280,91 +274,96 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalContainer: {
-    width: isMobile ? "89%" : "60%",
+    width: isSmallPhone ? "90%" : isMediumPhone ? "85%" : "80%",
     backgroundColor: "white",
-    borderRadius: 10,
-    padding: 20,
+    borderRadius: 12,
+    padding: isSmallPhone ? 16 : 20,
     alignItems: "center",
     elevation: 5,
+    maxWidth: 400,
+  },
+  title: {
+    fontFamily: "GoogleSans",
+    fontSize: isSmallPhone ? 20 : 22,
+    marginBottom: 8,
+    textAlign: "center",
+    color: "#3a5665",
+    fontWeight: "bold",
   },
   phoneNumber: {
-    fontSize: 36,
-    marginBottom: 10,
+    fontSize: isSmallPhone ? 32 : 36,
+    marginBottom: 8,
+    fontWeight: "bold",
   },
   callingText: {
     fontFamily: "GoogleSans",
-    fontSize: 14,
-    color: "gray",
-    marginBottom: 20,
+    fontSize: isSmallPhone ? 14 : 16,
+    color: "#666",
+    marginBottom: 16,
+    textAlign: "center",
   },
   dialPad: {
-    width: isMobile ? "100%" : "58%",
+    width: "100%",
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
   dialButton: {
-    width: "22%", // Adjust width to fit four buttons per row
-    aspectRatio: 1, // Keep buttons square
+    width: "23%",
+    aspectRatio: 1,
+    marginBottom: isSmallPhone ? 8 : 12,
     justifyContent: "center",
     alignItems: "center",
-    margin: 5,
   },
   dialButtonInner: {
-    width: "100%",
-    height: "100%",
+    width: "90%",
+    height: "90%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#eeeeee",
     borderRadius: 10,
+    borderWidth: 1,
   },
   dialButtonText: {
     fontFamily: "GoogleSans",
-    fontSize: 22,
+    fontSize: isSmallPhone ? 20 : 22,
+    fontWeight: "600",
   },
   letterText: {
-    fontSize: 10,
-    color: "gray",
-    marginTop: 2,
+    fontSize: isSmallPhone ? 9 : 10,
+    marginTop: 4,
   },
   SubmitButton: {
     backgroundColor: "#3a5565",
     paddingVertical: 12,
     borderRadius: 25,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 8,
     elevation: 3,
-    padding: 20,
-    flexDirection: "row", // Aligns icon and text horizontally
-    justifyContent: "center", // Center everything inside the button
-    width: isMobile ? "100%" : "58%",
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    justifyContent: "center",
+    width: "100%",
+    minHeight: 50,
   },
   SubmitButtonText: {
     color: "white",
-    fontSize: 18,
-    
-    marginLeft: 10, // Space between icon and text
+    fontSize: isSmallPhone ? 16 : 18,
+    marginLeft: 8,
     fontWeight: "bold",
   },
   topRightCloseButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    padding: 10,
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 8,
+    zIndex: 1,
   },
   closeButtonText: {
-    fontWeight: 'bold',
-   fontSize: 16,
- },
- title: {
-   fontFamily: "GoogleSans",
-   fontSize: 24,
-   marginBottom: 10,
-   textAlign: "center",
-   color: "#666",
- },
- 
+    fontWeight: "bold",
+    fontSize: isSmallPhone ? 16 : 18,
+    color: "#666",
+  },
 });
 
 export default PhoneDialerModal;

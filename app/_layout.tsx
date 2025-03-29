@@ -4,26 +4,27 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import DrawerLayout from './DrawerLayout';  
 import { useColorScheme } from '../hooks/useColorScheme';  
-
+import 'react-native-reanimated';
 
  
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();  
-  const [loaded] = useFonts({
-    GoogleSans: require('../assets/fonts/GoogleSans-Regular.ttf'),
+  const [fontsLoaded] = useFonts({
+    'GoogleSans-Regular': require('../assets/fonts/GoogleSans-Regular.ttf'),
     'Kanit-Regular': require('../assets/fonts/Kanit-Regular.ttf'),
-    'Kanit-Bold': require('../assets/fonts/Kanit-Bold.ttf'),
   });
+  
+ 
 
   useEffect(() => {
-    if (loaded) {
+    if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [fontsLoaded]);
 
-  if (!loaded) {
+  if (!fontsLoaded) {
     return null;  
   }
 

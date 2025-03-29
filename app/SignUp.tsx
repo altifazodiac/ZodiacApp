@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { database } from "./firebase"; // Import your Firebase config
+import { database } from "../utils/firebase"; // Import your Firebase config
 import { ref, set } from "firebase/database";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 

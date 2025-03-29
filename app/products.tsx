@@ -16,17 +16,16 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
-import * as ImagePicker from 'expo-image-picker';
+ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { fetchProducts, addOrUpdateProduct, deleteProduct, fetchNextPage } from './firebaseFunctions';
+import { fetchProducts, addOrUpdateProduct, deleteProduct, fetchNextPage } from "../utils/firebaseFunctions";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
 import { runOnJS } from 'react-native-reanimated'; 
 import { getDatabase, ref as databaseRef, get, update } from 'firebase/database';
 import RNPickerSelect from 'react-native-picker-select'; // Import statement
-import { AntDesign } from '@expo/vector-icons';
+import Icon from "react-native-vector-icons/Ionicons";
 
  
 
@@ -315,14 +314,14 @@ const Products = () => {
       await deleteProduct(id);
   
       loadInitialProducts(); // Reload products after deletion
-      alert('Product deleted successfully!');
+      window.alert('Product deleted successfully!');
     } catch (error) {
       if (error instanceof Error) {
         console.error('Error deleting product:', error.message);
-        alert(`Error deleting product: ${error.message}`);
+        window.alert(`Error deleting product: ${error.message}`);
       } else {
         console.error('Error deleting product:', error);
-        alert('An unknown error occurred while deleting the product.');
+        window.alert('An unknown error occurred while deleting the product.');
       }
     }
   };
@@ -343,10 +342,10 @@ const Products = () => {
     } catch (error) {
       if (error instanceof Error) {
         console.error('Error deleting image:', error.message);
-        alert(`Error deleting image: ${error.message}`);
+        window.alert(`Error deleting image: ${error.message}`);
       } else {
         console.error('Error deleting image:', error);
-        alert('An unknown error occurred while deleting the image.');
+        window.alert('An unknown error occurred while deleting the image.');
       }
     }
   };
@@ -355,7 +354,7 @@ const Products = () => {
     
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      alert('Permission to access the gallery is required!');
+      window.alert('Permission to access the gallery is required!');
       return;
     }
   
@@ -395,10 +394,10 @@ const Products = () => {
     } catch (error) {
       if (error instanceof Error) {
         console.error('Image upload failed:', error.message);
-        alert(`Image upload failed: ${error.message}`);
+        window.alert(`Image upload failed: ${error.message}`);
       } else {
         console.error('Image upload failed:', error);
-        alert('Image upload failed. Please try again.');
+        window.alert('Image upload failed. Please try again.');
       }
       return null;
     }
@@ -406,7 +405,7 @@ const Products = () => {
   
   const handleAddOrUpdateProduct = async () => {
     if (!productName || !productPrice || !nameDisplay || !categoryId) {
-      alert('Please fill all product details before submitting.');
+      window.alert('Please fill all product details before submitting.');
       return;
     }
   
@@ -438,20 +437,20 @@ const Products = () => {
     try {
       if (editId) {
         await addOrUpdateProduct(productData, editId);
-        alert('Product updated successfully!');
+        window.alert('Product updated successfully!');
       } else {
         await addOrUpdateProduct(productData, null);
-        alert('Product added successfully!');
+        window.alert('Product added successfully!');
       }
       resetForm(); // Reset the form after submission
       loadProducts(); // Reload the product list
       toggleFormDrawer(); // Close the form drawer
     } catch (error) {
       if (error instanceof Error) {
-        alert(`Error: ${error.message}`);
+        window.alert(`Error: ${error.message}`);
         console.error('Error adding/updating product:', error.message);
       } else {
-        alert('An unknown error occurred.');
+        window.alert('An unknown error occurred.');
         console.error('Error adding/updating product:', error);
       }
     }
@@ -850,11 +849,11 @@ const Products = () => {
       
     <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
       <Icon name="filter" size={20} color="#fff" />
-      <Text style={[styles.drawerToggleText,{fontFamily:'GoogleSans,Kanit-Regular'}]}>Show Filters</Text>
+      <Text style={[styles.drawerToggleText,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>Show Filters</Text>
     </TouchableOpacity>
     <TouchableOpacity onPress={toggleFormDrawer} style={styles.drawerToggleButton}>
-      <Icon name="plus" size={20} color="#fff" />
-      <Text style={[styles.drawerToggleText,,{fontFamily:'GoogleSans,Kanit-Regular'}]}>Add New Item</Text>
+      <Icon name="add" size={20} color="#fff" />
+     <Text style={[styles.drawerToggleText,,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>Add New Item</Text>
     </TouchableOpacity>
 </View>
     <Modal visible={formDrawerVisible} transparent={true} animationType="none">
@@ -918,29 +917,15 @@ const ProductItem = ({
     translateY.value = withTiming(0, { duration: 500 });
   }, []);
 
-  const handleDeletePress = (id: string, imageUrl: string | null) => {
+  const handleDeletePress = async (id: string, imageUrl: string | null) => {
     console.log('Delete button pressed with id:', id); // Debug log
 
-    Alert.alert(
-      "Confirm Delete",
-      "Are you sure you want to delete this item?",
-      [
-        {
-          text: "Cancel",
-          onPress: () => console.log("Delete canceled"),
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          onPress: async () => {
-            console.log('Deleting item...'); // Debug log
-            await onDelete(id, imageUrl); // Ensure onDelete is awaited
-          },
-          style: "destructive"
-        }
-      ],
-      { cancelable: true }
-    );
+    if (window.confirm("Are you sure you want to delete this item?")) {
+      console.log('Deleting item...');
+      await onDelete(id, imageUrl);
+    } else {
+      console.log("Delete canceled");
+    }
   };
 
   return (
@@ -952,28 +937,32 @@ const ProductItem = ({
       )}
       <View>
         <Text style={[{fontFamily:'Kanit-Regular'}]}>{item.nameDisplay}</Text>
-        <Text style={[{fontFamily:'GoogleSans'}]}>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
       </View>
       <View>
-        <Text style={[{fontFamily:'GoogleSans'}]}>Size: {item.productSize}</Text>
-        <Text style={[{fontFamily:'GoogleSans'}]}>Unit: {item.unit}</Text> 
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Size: {item.productSize}</Text>
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Unit: {item.unit}</Text> 
       </View>
       <View>
-        <Text style={[{fontFamily:'GoogleSans'}]}>Price: {item.price}</Text>
-        <Text style={[{ color: item.status ? 'green' : 'red' }, {fontFamily:'GoogleSans'}]}>
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Price: {item.price}</Text>
+        <Text style={[{ color: item.status ? 'green' : 'red' }, {fontFamily:'GoogleSans-Regular'}]}>
           {item.status ? 'Active' : 'Inactive'}
         </Text>
       </View>
       <View style={styles.buttonGroup}>
         <TouchableOpacity onPress={() => onEdit(item)}>
-          <AntDesign name="edit" size={24} color="#9969c7" />
+          <Icon name="pencil" size={24} color="#9969c7" />
+          
         </TouchableOpacity>
         <TouchableOpacity 
   onPress={() => handleDeletePress(item.id, item.imageUrl)} 
   style={styles.buttonMargin}
   delayPressIn={100} // Add a small delay
 >
-  <AntDesign name="delete" size={24} color="#9969c7" />
+          <Icon name="trash" size={24} color="#9969c7" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => console.log('View Product')} style={styles.buttonMargin}>
+          <Icon name="eye" size={24} color="#9969c7" />
 </TouchableOpacity>
       </View>
     </Animated.View>
@@ -1113,16 +1102,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     backgroundColor: 'white',
     borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     elevation: 2,
   },
   smallProductImage: {
     width: 50,
     height: 50,
     marginRight: 10,
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -1162,10 +1151,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: 50,
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
   },
   scrollViewContainer: {
     paddingBottom: 20,  

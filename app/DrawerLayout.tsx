@@ -1,21 +1,20 @@
 import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
 import { Colors } from '../constants/Colors';  
 import { useColorScheme } from '../hooks/useColorScheme'; 
 import Login from './login';  
 import Products from './products';  
-import CategoryScreen from './CategoryScreen ';
+import CategoryScreen from './CategoryScreen';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
 import Setting from './Setting';
 import MemberRegister from './MemberRegister';
-import Passcode from './Passcode';
 import SignUp from './SignUp';
 import CreatePasscode from './CreatePasscode';
 import DisplayPasscode from './DisplayPasscodeScreen';
- 
+import Dashboard from './Dashboard';
+import Icon from "react-native-vector-icons/Ionicons"; 
 
 const Drawer = createDrawerNavigator();
 
@@ -24,6 +23,7 @@ const DrawerLayout = () => {
 
   return (
     <Drawer.Navigator  
+      initialRouteName="Dashboard"
       screenOptions={({ navigation }) => ({
         drawerActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: true,
@@ -32,123 +32,90 @@ const DrawerLayout = () => {
             onPress={() => navigation.toggleDrawer()}
             style={{ marginLeft: 10 }}
           >
-            <Ionicons name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
+            <Icon name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
           </Pressable>
         ),
       })}
     >
- <Drawer.Screen
-        name="login"
+      <Drawer.Screen
+        name="Dashboard"
         options={{
-          title: 'Login',
+          title: 'Dashboard',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            <Icon name="speedometer-outline" color={color} size={24} />
           ),
         }}
-        component={Login}  
+        component={Dashboard}
       />
-       <Drawer.Screen
-        name="DisplayPasscodesScreen"
-        options={{
-          title: 'DisplayPasscodesScreen',
-          drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
-          ),
-        }}
-        component={DisplayPasscode}  
-      />
-          <Drawer.Screen
-  name="SignUp"
-  options={{
-    title: 'Sign Up',
-    drawerIcon: ({ color, focused }) => (
-      <Ionicons name={focused ? 'log-in' : 'log-in-outline'} color={color} size={24} />
-    ),
-  }}
-  component={SignUp}
-/>
-<Drawer.Screen
-        name="CreatePasscode"
-        options={{
-          title: 'Create Passcode',
-          drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
-          ),
-        }}
-        component={CreatePasscode}  
-      />
-       <Drawer.Screen
-        name="Passcode"
-        options={{
-          title: 'Passcode',
-          drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
-          ),
-        }}
-        component={Passcode}  
-      />
-       <Drawer.Screen
+
+      <Drawer.Screen
         name="Orders"
         options={{
           title: 'Orders',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'menu' : 'menu-outline'} color={color} size={24} />
+            <Icon name="receipt-outline" color={color} size={24} />
           ),
         }}
-        component={Orders}  
+        component={Orders}
       />
-       <Drawer.Screen
-        name="CategoryScreen "
+
+      <Drawer.Screen
+        name="OrderDetail"
         options={{
-          title: 'Categories',
+          title: 'Order Detail',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            <Icon name="document-text-outline" color={color} size={24} />
           ),
         }}
-        component={CategoryScreen}  
+        component={OrderDetail}
       />
+
       <Drawer.Screen
         name="products"
         options={{
           title: 'Products',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            <Icon name="pricetags-outline" color={color} size={24} />
           ),
         }}
-        component={Products}  
+        component={Products}
       />
+
       <Drawer.Screen
-        name="OrderDetail"
+        name="CategoryScreen"
         options={{
-          title: 'OrderDetail',
+          title: 'Categories',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            <Icon name="apps-outline" color={color} size={24} />
           ),
         }}
-        component={OrderDetail}  
+        component={CategoryScreen}
       />
-       <Drawer.Screen
+
+      <Drawer.Screen
         name="Setting"
         options={{
           title: 'Setting',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'settings' : 'settings-outline'} color={color} size={24} />
+            <Icon name="settings-outline" color={color} size={24} />
           ),
         }}
-        component={Setting}  
+        component={Setting}
       />
-       <Drawer.Screen
+
+      <Drawer.Screen
         name="MemberRegister"
         options={{
-          title: 'MemberRegister',
+          title: 'Member Register',
           drawerIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'log-in' : 'log-in-outline'} color={color} size={24} />
+            <Icon name="person-add-outline" color={color} size={24} />
           ),
         }}
-        component={MemberRegister}  
+        component={MemberRegister}
       />
+
+      {/* เอาหน้า Passcode และ CreatePasscode ออกจาก Drawer */}
     </Drawer.Navigator>
-    
   );
 };
 

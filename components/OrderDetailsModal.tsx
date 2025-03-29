@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { Option, Product } from "../Data/types"; // Ensure proper import
 import { ref, onValue } from "firebase/database";
-import { database } from "../app/firebase";
+import { database } from "../utils/firebase";
 
 interface Props {
   visible: boolean;
@@ -227,10 +227,7 @@ const styles = StyleSheet.create({
         padding: 20,
         alignItems: "center",
         elevation: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
         position: "relative", // Added relative positioning
       },
    
@@ -309,10 +306,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.23,
-    shadowRadius: 2.62,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     elevation: 4,
   },
   activeButton: {

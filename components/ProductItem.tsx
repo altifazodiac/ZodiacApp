@@ -77,7 +77,7 @@ const ProductItem: React.FC<Props> = ({
 
   return (
     <TouchableWithoutFeedback
-      onPress={() => { handleIncreaseQuantity(); toggleDrawer(); Vibration.vibrate(); }}
+      onPress={() => { handleIncreaseQuantity();  Vibration.vibrate(); }}
       onLongPress={onLongPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -145,10 +145,7 @@ const styles = StyleSheet.create({
     borderWidth: 5,
     padding: isMobile ? 6 : isTablet ? 6 : 12,
     margin: isMobile ? 6 : isTablet ? 6 : 12,
-    shadowColor: "#3c5867",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.23,
-    shadowRadius: 2.62,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     width: isMobile ? 120 : isTablet ? 155 : 250,
     height: isMobile ? 150 : isTablet ? 205 : 330,
     flexDirection: 'column',  
@@ -167,7 +164,7 @@ const styles = StyleSheet.create({
     zIndex: 1, 
   },
   circleText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 12,
     fontWeight: "bold",
   },
@@ -197,7 +194,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cardDescription: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isMobile ? 8 : isTablet ? 10 : 15,
  
     marginTop: 1,
@@ -205,7 +202,7 @@ const styles = StyleSheet.create({
   },
   
   cardPrice: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isMobile ? 14 : isTablet ? 18 : 20,
     fontWeight: "bold",
     textAlign: 'center',
@@ -254,7 +251,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   quantityText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isMobile ? 12 : isTablet ? 16 : 18,
     marginHorizontal: isMobile ? 4 : isTablet ? 8 : 10,
   },

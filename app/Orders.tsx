@@ -22,15 +22,19 @@ import {
   Image,
   TextInput,
 } from "react-native";
-import { db, ref, onValue } from "./firebase";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { database, db, ref, onValue } from "../utils/firebase";
 import { Option, Product, Category, OrderItem } from "../Data/types";
 import OrderDetailsModal from "../components/OrderDetailsModal";
 import ProductItem from "../components/ProductItem";
 import {} from "react-native-gesture-handler";
 import Swipeable from "react-native-gesture-handler/Swipeable";
-import { database } from "../app/firebase";
-import { DatabaseReference, get, set, push, getDatabase} from "firebase/database";
+import {
+  DatabaseReference,
+  get,
+  set,
+  push,
+  getDatabase,
+} from "firebase/database";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import { Settings } from "../Data/types"; // Adjust the path as needed
 import FastImage from "expo-fast-image";
@@ -40,7 +44,8 @@ import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
 import { curry } from "lodash";
 import EditNoteModal from "../components/EditNoteModal";
- 
+import Icon from "react-native-vector-icons/Ionicons";
+
 declare const window: any;
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -108,7 +113,7 @@ const Orders = () => {
   };
   const [isQrDialerVisible, setQrIsDialerVisible] = useState(false);
   const [isQRModalVisible, setQRModalVisible] = useState(false);
-  const mobileNumber = "0812345678"; // Replace with customer mobile number
+  const mobileNumber = "0924694099"; // Replace with customer mobile number
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingOrderIndex, setEditingOrderIndex] = useState<number | null>(
@@ -485,7 +490,7 @@ const Orders = () => {
         clearOrderState(); // Reset state for web
       }
     } else {
-      Alert.alert(
+      window.alert(
         "Clear All Items",
         "Are you sure you want to clear all items?",
         [
@@ -858,7 +863,6 @@ const Orders = () => {
     }
   };
 
-
   const saveOrderToDatabase = async (
     orderItems: OrderItem[],
     receiptNumber: string,
@@ -873,28 +877,52 @@ const Orders = () => {
     selectedPaymentMethod: string[]
   ) => {
     try {
-      const database = getDatabase(); // Get the Firebase Realtime Database instance
-      const ordersRef = ref(database, "orders"); // Reference to the "orders" node
-  
-      // Create the order data object
+      const db = getDatabase();
+      const ordersRef = ref(db, "orders");
+
+      // ตรวจสอบและแมปข้อมูล items ใหม่
+      const items = orderItems
+        .map((item) => {
+          // ตรวจสอบว่า item และ item.product มีค่าถูกต้อง
+          if (!item || !item.product) {
+            console.warn("Invalid item detected:", item);
+            return null;
+          }
+
+          return {
+            productId: item.product.id || "unknown-id",
+            productName: item.product.nameDisplay || "Unknown Product",
+            productSize: item.product.productSize || "",
+            quantity: item.quantity || 1,
+            price: parseFloat(item.product.price) || 0,
+            selectedOptions:
+              item.selectedOptions?.map((opt) => ({
+                id: opt.id || "",
+                name: opt.name || "",
+                price: opt.price || 0,
+              })) || [],
+            customInput: item.customInput || "",
+            totalPrice:
+              item.quantity *
+                (parseFloat(item.product.price) +
+                  (item.selectedOptions?.reduce(
+                    (sum, opt) => sum + (opt.price || 0),
+                    0
+                  ) || 0)) || 0,
+          };
+        })
+        .filter((item) => item !== null); // กรองออกหากมี item เป็น null
+
+      // ตรวจสอบว่ามี items ที่ถูกต้องก่อนบันทึก
+      if (items.length === 0) {
+        throw new Error("No valid items to save");
+      }
+
       const orderData = {
         receiptNumber,
         queueNumber,
         orderType: selectedOrderType,
-        items: orderItems.map((item) => ({
-          productId: item.product.id,
-          productName: item.product.nameDisplay,
-          quantity: item.quantity,
-          selectedOptions: item.selectedOptions,
-          customInput: item.customInput,
-          totalPrice:
-            item.quantity *
-            (Number(item.product.price) +
-              item.selectedOptions.reduce(
-                (sum: number, option: Option) => sum + (Number(option.price) || 0),
-                0
-              )),
-        })),
+        items, // ใช้ items ที่ผ่านการตรวจสอบแล้ว
         subtotal,
         tax,
         serviceCharge,
@@ -902,27 +930,46 @@ const Orders = () => {
         cashChange,
         remainBalance,
         paymentMethods: selectedPaymentMethod,
-        timestamp: new Date().toISOString(), // Add a timestamp for when the order was placed
+        orderDate: new Date().toISOString(),
       };
-  
-      // Push the order data to the database
-      const newOrderRef = push(ordersRef); // Generate a unique key for the new order
-      await set(newOrderRef, orderData); // Save the order data under the generated key
-  
-      console.log("Order saved successfully!");
+
+      console.log("Saving order data:", orderData); // สำหรับ debug
+
+      const newOrderRef = push(ordersRef);
+      await set(newOrderRef, orderData);
+
+      console.log("✅ Order saved successfully!");
+      return true;
     } catch (error) {
-      console.error("Error saving order:", error);
+      console.error("❌ Failed to save order:", error);
+      window.alert("Save Failed", "ไม่สามารถบันทึกคำสั่งซื้อลงในฐานข้อมูลได้");
+      return false;
     }
   };
+
   const handleProceedToPayment = async () => {
-    await incrementReceiptNumber();
-    await incrementQueueNumber();
-  
-    if (queueNumber !== null) {
-      await saveOrderToDatabase(
-        orderItems,
+    try {
+      if (orderItems.length === 0) {
+        window.alert("No Items", "กรุณาเพิ่มอย่างน้อยหนึ่งรายการ");
+        return;
+      }
+      if (selectedPaymentMethod.length === 0) {
+        window.alert("No Payment Method", "กรุณาเลือกวิธีการชำระเงิน");
+        return;
+      }
+      // 1. อัปเดตเลขที่ใบเสร็จและคิวให้เสร็จก่อน
+      await incrementReceiptNumber();
+      const newQueueNumber = (queueNumber || 0) + 1;
+      await set(ref(database, "lastQueueNumber"), newQueueNumber);
+
+      // 2. ใช้ค่าล่าสุดจาก state
+      const currentOrderItems = orderItems.map((item) => ({ ...item })); // Deep copy
+
+      // 3. บันทึกข้อมูล
+      const success = await saveOrderToDatabase(
+        currentOrderItems,
         receiptNumber,
-        queueNumber,
+        newQueueNumber,
         selectedOrderType,
         total,
         subtotal,
@@ -932,18 +979,37 @@ const Orders = () => {
         remainbalance,
         selectedPaymentMethod
       );
-      setOrderItems([]); // Clear the order items after saving
-    } else {
-      console.error("Queue number is not available");
+
+      if (success) {
+        // 4. รีเซ็ตสถานะหลังบันทึกสำเร็จ
+        setOrderItems([]);
+        setSelectedPaymentMethod([]);
+        setCashChange(0);
+        setRemainBalance(0);
+        setQueueNumber(newQueueNumber);
+      }
+    } catch (error) {
+      console.error("Payment process failed:", error);
+      window.alert("Error", "ไม่สามารถดำเนินการชำระเงินให้เสร็จสมบูรณ์ได้");
     }
   };
+  const isMobile =
+    windowWidth <= 768 ||
+    (typeof navigator !== "undefined" &&
+      /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
   return (
     <View
       style={
         isMobile
-        ? [styles.containerMobile, { backgroundColor: currentTheme.backgroundColor }]
-        : [styles.container, { backgroundColor: currentTheme.backgroundColor }]
-    }
+          ? [
+              styles.containerMobile,
+              { backgroundColor: currentTheme.backgroundColor },
+            ]
+          : [
+              styles.container,
+              { backgroundColor: currentTheme.backgroundColor },
+            ]
+      }
     >
       <EditNoteModal
         visible={modalVisible}
@@ -1013,7 +1079,7 @@ const Orders = () => {
                         selectedCategory === category.id
                           ? styles.tabTextActive
                           : null,
-                        { fontFamily: "GoogleSans" },
+                        { fontFamily: "GoogleSans-Regular" },
                       ]}
                     >
                       {category.name}
@@ -1032,6 +1098,28 @@ const Orders = () => {
                   contentContainerStyle={styles.productListContainer}
                 />
               </ScrollView>
+              {isMobile && (
+              <Animated.View style={[styles.drawerToggleButton]}>
+                <TouchableOpacity
+                  onPress={toggleDrawer}
+                  style={{
+                    padding: 10,
+                    borderRadius: 50,
+                    backgroundColor: isDrawerOpen ? "#3a5565" : "#3a5565",
+                  }}
+                >
+                  <Icon
+                    name={
+                      isDrawerOpen
+                        ? "chevron-down-circle-outline"
+                        : "chevron-up-circle-outline"
+                    }
+                    size={32}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
             </View>
           </ScrollView>
         ) : (
@@ -1064,7 +1152,7 @@ const Orders = () => {
                           selectedCategory === category.id
                             ? styles.tabTextActive
                             : null,
-                          { fontFamily: "GoogleSans" },
+                          { fontFamily: "GoogleSans-Regular" },
                         ]}
                       >
                         {category.name}
@@ -1075,7 +1163,7 @@ const Orders = () => {
               </ScrollView>
               {categories.length > 4 && (
                 <View style={styles.scrollHintIcon}>
-                  <Ionicons
+                  <Icon
                     name="chevron-forward-outline"
                     size={24}
                     color={"#3c5867"}
@@ -1096,9 +1184,16 @@ const Orders = () => {
             </ScrollView>
 
             {isMobile && (
-              <Animated.View style={[styles.drawerToggleButton]}>
-                <TouchableOpacity onPress={toggleDrawer}>
-                  <Ionicons
+              <Animated.View style={[styles.drawerToggleButtonweb]}>
+                <TouchableOpacity
+                  onPress={toggleDrawer}
+                  style={{
+                    padding: 10,
+                    borderRadius: 50,
+                    backgroundColor: isDrawerOpen ? "#3a5565" : "#3a5565",
+                  }}
+                >
+                  <Icon
                     name={
                       isDrawerOpen
                         ? "chevron-down-circle-outline"
@@ -1136,7 +1231,10 @@ const Orders = () => {
           <View style={styles.orderSummaryContainer}>
             <View style={styles.orderSummaryTitleContainer}>
               <Text
-                style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}
+                style={[
+                  styles.orderSummaryTitle,
+                  { fontFamily: "GoogleSans-Regular" },
+                ]}
               >
                 Orders
               </Text>
@@ -1158,32 +1256,28 @@ const Orders = () => {
                 <TouchableOpacity
                   style={[styles.circleButton, { marginRight: 5 }]}
                 >
-                  <AntDesign name="printer" size={16} color="black" />
+                  <Icon name="print-outline" size={16} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.circleButton}
                   onPress={confirmClearOrderItems}
                 >
-                  <Ionicons name="trash-outline" size={16} color="#E21818" />
+                  <Icon name="trash-outline" size={16} color="red" />
                 </TouchableOpacity>
               </View>
             </View>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={18}
-                  color={"#3c5867"}
-                />
+                <Icon name="person-outline" size={16} />
                 <Text style={styles.orderHeaderText}> Cashier 1</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="calendar-outline" size={18} color={"#3c5867"} />
+                <Icon name="calendar-outline" size={16} color={"#3c5867"} />
                 <Text style={styles.dateText}> {formattedDate}</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Ionicons name="time-outline" size={18} color={"#3c5867"} />
+                <Icon name="time-outline" size={16} color={"#3c5867"} />
                 <View style={styles.timeContainer}>
                   <Animated.Text
                     style={[
@@ -1255,102 +1349,114 @@ const Orders = () => {
               ))}
             </View>
             <ScrollView>
-  {orderItems.map((item, index) => (
-    <Swipeable
-      key={item.product.id}
-      renderRightActions={(progress, dragX) =>
-        rightSwipeActions(progress, dragX, item.product.id, index)
-      }
-    >
-      <Animated.View
-        style={{
-          transform: [{ translateY: animationValues[index].translateY }],
-          opacity: animationValues[index].opacity,
-        }}
-      >
-        <View style={styles.orderItem}>
-          <View style={styles.orderItemTextContainer}>
-            {/* Product Name */}
-            <Text style={{ fontFamily: "Kanit-Regular" }}>
-              {item.product.nameDisplay}
-              {settings?.OrderPanels?.displaySize && item.product?.productSize
-                ? ` (${item.product.productSize})`
-                : ""}
-            </Text>
+              {orderItems.map((item, index) => (
+                <Swipeable
+                  key={item.product.id}
+                  renderRightActions={(progress, dragX) =>
+                    rightSwipeActions(progress, dragX, item.product.id, index)
+                  }
+                >
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { translateY: animationValues[index].translateY },
+                      ],
+                      opacity: animationValues[index].opacity,
+                    }}
+                  >
+                    <View style={styles.orderItem}>
+                      <View style={styles.orderItemTextContainer}>
+                        {/* Product Name */}
+                        <Text style={{ fontFamily: "Kanit-Regular" }}>
+                          {item.product.nameDisplay}
+                          {settings?.OrderPanels?.displaySize &&
+                          item.product?.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
+                        </Text>
 
-            {/* Selected Options */}
-            {item.selectedOptions.length > 0 && (
-              <View style={styles.optionsPriceContainer}>
-                {item.selectedOptions.map((option, idx) => (
-                  <Text key={idx} style={styles.optionPriceTextItem}>
-                    ({option.name})
-                  </Text>
-                ))}
-              </View>
-            )}
+                        {/* Selected Options */}
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                ({option.name})
+                              </Text>
+                            ))}
+                          </View>
+                        )}
 
-            {/* Custom Input Note */}
-            {item.customInput && (
-              <Text
-                style={{
-                  fontFamily: "Kanit-Regular",
-                  color: "#263c48",
-                }}
-              >
-                Note: {item.customInput}
-              </Text>
-            )}
-          </View>
+                        {/* Custom Input Note */}
+                        {item.customInput && (
+                          <Text
+                            style={{
+                              fontFamily: "Kanit-Regular",
+                              color: "#263c48",
+                            }}
+                          >
+                            Note: {item.customInput}
+                          </Text>
+                        )}
+                      </View>
 
-          {/* Quantity & Price */}
-          <View style={styles.orderItemQuantityContainer}>
-            <Text
-              style={{
-                fontFamily: "GoogleSans",
-                color: "#3a5565",
-                fontSize: 14,
-              }}
-            >
-              {item.quantity} x {parseFloat(item.product.price).toFixed(0)}฿
-            </Text>
+                      {/* Quantity & Price */}
+                      <View style={styles.orderItemQuantityContainer}>
+                        <Text
+                          style={{
+                            fontFamily: "GoogleSans-Regular",
+                            color: "#3a5565",
+                            fontSize: 14,
+                          }}
+                        >
+                          {item.quantity} x{" "}
+                          {parseFloat(item.product.price).toFixed(0)}฿
+                        </Text>
 
-            {item.selectedOptions.length > 0 && (
-              <View style={styles.optionsPriceContainer}>
-                {item.selectedOptions.map((option, idx) => (
-                  <Text key={idx} style={styles.optionPriceTextItem}>
-                    (+{option.price.toFixed(0)}฿)
-                  </Text>
-                ))}
-              </View>
-            )}
-          </View>
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                (+{option.price.toFixed(0)}฿)
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+                      </View>
 
-          {/* Total Price */}
-          <Text style={styles.orderItemPrice}>
-            {(
-              item.quantity *
-              (parseFloat(item.product.price) +
-                item.selectedOptions.reduce(
-                  (sum, option) => sum + option.price,
-                  0
-                ))
-            ).toFixed(0)}
-            ฿
-          </Text>
-        </View>
-      </Animated.View>
-    </Swipeable>
-  ))}
-</ScrollView>
+                      {/* Total Price */}
+                      <Text style={styles.orderItemPrice}>
+                        {(
+                          item.quantity *
+                          (parseFloat(item.product.price) +
+                            item.selectedOptions.reduce(
+                              (sum, option) => sum + option.price,
+                              0
+                            ))
+                        ).toFixed(0)}
+                        ฿
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </Swipeable>
+              ))}
+            </ScrollView>
 
             <View style={styles.orderTotalContainer}>
               {/* Total Quantity */}
               <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
                   Total Quantity:
                 </Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
+                  style={[
+                    { fontFamily: "GoogleSans-Regular", textAlign: "right" },
+                  ]}
                 >
                   {orderItems.reduce((sum, item) => sum + item.quantity, 0)}
                 </Text>
@@ -1358,9 +1464,13 @@ const Orders = () => {
 
               {/* Subtotal */}
               <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Subtotal:</Text>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
+                  Subtotal:
+                </Text>
                 <Text
-                  style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}
+                  style={[
+                    { fontFamily: "GoogleSans-Regular", textAlign: "right" },
+                  ]}
                 >
                   {subtotal.toFixed(0)}฿
                 </Text>
@@ -1369,12 +1479,17 @@ const Orders = () => {
               {/* Discount */}
               {settings?.OrderPanels.displayDiscount && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans", color: "#3a5565" }}>
+                  <Text
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      color: "#3a5565",
+                    }}
+                  >
                     Discount:
                   </Text>
                   <Text
                     style={{
-                      fontFamily: "GoogleSans",
+                      fontFamily: "GoogleSans-Regular",
                       textAlign: "right",
                       color: "#3a5565",
                     }}
@@ -1387,11 +1502,14 @@ const Orders = () => {
               {/* Tax */}
               {settings?.OrderPanels.displayTax && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>
+                  <Text style={{ fontFamily: "GoogleSans-Regular" }}>
                     Tax ({(settings?.OrderPanels.taxValue * 100).toFixed(0)}%):
                   </Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                    }}
                   >
                     {tax.toFixed(0)}฿
                   </Text>
@@ -1401,13 +1519,16 @@ const Orders = () => {
               {/* Service Charge */}
               {settings?.OrderPanels.displayServiceCharge && (
                 <View style={styles.orderTotalRow}>
-                  <Text style={{ fontFamily: "GoogleSans" }}>
+                  <Text style={{ fontFamily: "GoogleSans-Regular" }}>
                     Service Charge (
                     {(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}
                     %):
                   </Text>
                   <Text
-                    style={{ fontFamily: "GoogleSans", textAlign: "right" }}
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                    }}
                   >
                     {serviceCharge.toFixed(0)}฿
                   </Text>
@@ -1418,12 +1539,12 @@ const Orders = () => {
                 <>
                   {/* Primary Payment Method */}
                   <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans" }}>
+                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
                       Payment Method:
                     </Text>
                     <Text
                       style={{
-                        fontFamily: "GoogleSans",
+                        fontFamily: "GoogleSans-Regular",
                         textAlign: "right",
                         fontSize: 14,
                         color: "#3a5565",
@@ -1439,12 +1560,12 @@ const Orders = () => {
                   {/* Secondary Payment Method, if present */}
                   {selectedPaymentMethod.length > 1 && (
                     <View style={styles.orderTotalRow}>
-                      <Text style={{ fontFamily: "GoogleSans" }}>
+                      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
                         Payment Method 2:
                       </Text>
                       <Text
                         style={{
-                          fontFamily: "GoogleSans",
+                          fontFamily: "GoogleSans-Regular",
                           textAlign: "right",
                           fontSize: 14,
                           color: "#3a5565",
@@ -1460,10 +1581,12 @@ const Orders = () => {
 
                   {/* Change */}
                   <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans" }}>Remaining:</Text>
+                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                      Remaining:
+                    </Text>
                     <Text
                       style={{
-                        fontFamily: "GoogleSans",
+                        fontFamily: "GoogleSans-Regular",
                         textAlign: "right",
                         fontSize: 14,
                       }}
@@ -1476,11 +1599,13 @@ const Orders = () => {
 
               {/* Remaining UI elements */}
               <View style={styles.orderTotalRow}>
-                <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
+                  Total:
+                </Text>
                 <Text
                   style={[
                     {
-                      fontFamily: "GoogleSans",
+                      fontFamily: "GoogleSans-Regular",
                       textAlign: "right",
                       fontSize: 18,
                       fontWeight: "bold",
@@ -1510,180 +1635,457 @@ const Orders = () => {
                   style={styles.proceedButton}
                   onPress={handleProceedToPayment}
                 >
-                  <Text style={styles.proceedButtonText}>
-                    Proceed to Payment
-                  </Text>
+                  <Text style={styles.proceedButtonText}>ชำระเงิน</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}
             <TouchableOpacity style={styles.CloseButton} onPress={toggleDrawer}>
-              <Text style={styles.CloseButtonText}>Close</Text>
+              <Text style={styles.CloseButtonText}>ปิด</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
       )}
 
-{!isMobile && (
-  <View style={styles.layout2}>
-    <View style={styles.orderSummaryContainer}>
-      {/* Order List Title */}
-      <View style={styles.orderSummaryTitleContainer}>
-        <Text style={[styles.orderSummaryTitle, { fontFamily: "GoogleSans" }]}>
-          Order List
-        </Text>
-      </View>
+      {!isMobile && (
+        <View style={styles.layout2}>
+          <View style={styles.orderSummaryContainer}>
+            {/* Order List Title */}
+            <View style={styles.orderSummaryTitleContainer}>
+              <Text
+                style={[
+                  styles.orderSummaryTitle,
+                  { fontFamily: "GoogleSans-Regular" },
+                ]}
+              >
+                Order List
+              </Text>
+            </View>
 
-      {/* Order Header */}
-      <View style={styles.orderHeader}>
-        <View style={styles.orderHeaderGroup}>
-          <Text style={styles.orderHeaderReceiptText}>#{receiptNumber}</Text>
-        </View>
-        <View style={styles.orderHeaderGroup}>
-          <Text style={styles.orderHeaderReceiptText}>Queue: #{queueNumber}</Text>
-        </View>
-        <View style={styles.orderHeaderGroup}>
-          <TouchableOpacity style={[styles.circleButton, { marginRight: 5 }]}>
-            <AntDesign name="printer" size={16} color="black" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.circleButton} onPress={confirmClearOrderItems}>
-            <Ionicons name="trash-outline" size={16} color="#E21818" />
-          </TouchableOpacity>
-        </View>
-      </View>
+            {/* Order Header */}
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                <Text style={styles.orderHeaderReceiptText}>
+                  #{receiptNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Text style={styles.orderHeaderReceiptText}>
+                  Queue: #{queueNumber}
+                </Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <TouchableOpacity
+                  style={[styles.circleButton, { marginRight: 5 }]}
+                >
+                  <AntDesign name="printer" size={16} color="black" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.circleButton}
+                  onPress={confirmClearOrderItems}
+                >
+                  <Icon name="trash-outline" size={16} color="#E21818" />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-      {/* Order Details */}
-      <View style={styles.orderHeader}>
-        <View style={styles.orderHeaderGroup}>
-          <Ionicons name="person-circle-outline" size={18} color="#3c5867" />
-          <Text style={styles.orderHeaderText}> Cashier 1</Text>
-        </View>
-        <View style={styles.orderHeaderGroup}>
-          <Ionicons name="calendar-outline" size={18} color="#3c5867" />
-          <Text style={styles.dateText}>{formattedDate}</Text>
-        </View>
-        <View style={styles.orderHeaderGroup}>
-          <Ionicons name="time-outline" size={18} color="#3c5867" />
-          <View style={styles.timeContainer}>
-            <Animated.Text style={[styles.timeText, { opacity: fadeAnimHour, transform: [{ translateY: translateYAnimHour }] }]}>
-              {hour}
-            </Animated.Text>
-            <Text style={styles.timeSeparator}>:</Text>
-            <Animated.Text style={[styles.timeText, { opacity: fadeAnimMinute, transform: [{ translateY: translateYAnimMinute }] }]}>
-              {minute}
-            </Animated.Text>
-            <Text style={styles.timeSeparator}>:</Text>
-            <Animated.Text style={[styles.timeText, { opacity: fadeAnimSecond, transform: [{ translateY: translateYAnimSecond }] }]}>
-              {second}
-            </Animated.Text>
-          </View>
-        </View>
-      </View>
+            {/* Order Details */}
+            <View style={styles.orderHeader}>
+              <View style={styles.orderHeaderGroup}>
+                <Icon name="person-circle-outline" size={18} color="#3c5867" />
+                <Text style={styles.orderHeaderText}> Cashier 1</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Icon name="calendar-outline" size={18} color="#3c5867" />
+                <Text style={styles.dateText}>{formattedDate}</Text>
+              </View>
+              <View style={styles.orderHeaderGroup}>
+                <Icon name="time-outline" size={18} color="#3c5867" />
+                <View style={styles.timeContainer}>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimHour,
+                        transform: [{ translateY: translateYAnimHour }],
+                      },
+                    ]}
+                  >
+                    {hour}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimMinute,
+                        transform: [{ translateY: translateYAnimMinute }],
+                      },
+                    ]}
+                  >
+                    {minute}
+                  </Animated.Text>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <Animated.Text
+                    style={[
+                      styles.timeText,
+                      {
+                        opacity: fadeAnimSecond,
+                        transform: [{ translateY: translateYAnimSecond }],
+                      },
+                    ]}
+                  >
+                    {second}
+                  </Animated.Text>
+                </View>
+              </View>
+            </View>
 
-      {/* Order Type Tabs */}
-      <View style={styles.orderHeaderTabs}>
-        <Animated.View
-          style={{
-            ...styles.highlight,
-            transform: [{ translateX: highlightOffset.interpolate({ inputRange: [0, 100], outputRange: [0, 100] }) }],
-          }}
-        />
-        {["Dine In", "Take Away", "Delivery"].map((type) => (
-          <TouchableOpacity key={type} style={styles.buttonHeader} onPress={() => handleSelect(type as OrderType)}>
-            <Text style={[styles.buttonHeaderText, selectedOrderType === type && styles.selectedText]}>{type}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Order Items List */}
-      <ScrollView>
-        {orderItems.map((item, index) => (
-          <Swipeable
-            key={item.product.id}
-            renderRightActions={(progress, dragX) => (
+            {/* Order Type Tabs */}
+            <View style={styles.orderHeaderTabs}>
               <Animated.View
                 style={{
-                  transform: [{ scale: dragX.interpolate({ inputRange: [-100, 0], outputRange: [1, 0.5], extrapolate: "clamp" }) }],
+                  ...styles.highlight,
+                  transform: [
+                    {
+                      translateX: highlightOffset.interpolate({
+                        inputRange: [0, 100],
+                        outputRange: [0, 100],
+                      }),
+                    },
+                  ],
                 }}
-              >
-                <View style={styles.rightActionContainer}>
-                  <TouchableOpacity style={[styles.rightAction, currentTheme.button]} onPress={() => openEditModal(index)}>
-                    <Text style={[styles.actionText, { color: "white" }]}>Add Note</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.rightAction, currentTheme.button]} onPress={() => handleDiscountToggle(index)}>
-                    <Text style={[styles.actionText, { color: "white" }]}>Discount</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.rightAction, { backgroundColor: "#FF0000" }]} onPress={() => removeItemFromOrder(item.product.id)}>
-                    <Text style={[styles.actionText, { color: "white" }]}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              </Animated.View>
-            )}
-          >
-            <Animated.View
-              style={{
-                transform: [{ translateY: animationValues[index]?.translateY || 0 }],
-                opacity: animationValues[index]?.opacity || 1,
-              }}
-            >
-              <View style={styles.orderItem}>
-                <View style={styles.orderItemTextContainer}>
-                  <Text style={[{ fontFamily: "Kanit-Regular" }]}>
-                    {item.product.nameDisplay}
-                    {settings?.OrderPanels?.displaySize && item.product?.productSize ? ` (${item.product.productSize})` : ""}
+              />
+              {["Dine In", "Take Away", "Delivery"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={styles.buttonHeader}
+                  onPress={() => handleSelect(type as OrderType)}
+                >
+                  <Text
+                    style={[
+                      styles.buttonHeaderText,
+                      selectedOrderType === type && styles.selectedText,
+                    ]}
+                  >
+                    {type}
                   </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-                  {item.selectedOptions.length > 0 && (
-                    <View style={styles.optionsPriceContainer}>
-                      {item.selectedOptions.map((option, idx) => (
-                        <Text key={idx} style={styles.optionPriceTextItem}>({option.name})</Text>
-                      ))}
+            {/* Order Items List */}
+            <ScrollView>
+              {orderItems.map((item, index) => (
+                <Swipeable
+                  key={item.product.id}
+                  renderRightActions={(progress, dragX) => (
+                    <Animated.View
+                      style={{
+                        transform: [
+                          {
+                            scale: dragX.interpolate({
+                              inputRange: [-100, 0],
+                              outputRange: [1, 0.5],
+                              extrapolate: "clamp",
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <View style={styles.rightActionContainer}>
+                        <TouchableOpacity
+                          style={[styles.rightAction, currentTheme.button]}
+                          onPress={() => openEditModal(index)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Add Note
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.rightAction, currentTheme.button]}
+                          onPress={() => handleDiscountToggle(index)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Discount
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.rightAction,
+                            { backgroundColor: "#FF0000" },
+                          ]}
+                          onPress={() => removeItemFromOrder(item.product.id)}
+                        >
+                          <Text style={[styles.actionText, { color: "white" }]}>
+                            Remove
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Animated.View>
+                  )}
+                >
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { translateY: animationValues[index]?.translateY || 0 },
+                      ],
+                      opacity: animationValues[index]?.opacity || 1,
+                    }}
+                  >
+                    <View style={styles.orderItem}>
+                      <View style={styles.orderItemTextContainer}>
+                        <Text style={[{ fontFamily: "Kanit-Regular" }]}>
+                          {item.product.nameDisplay}
+                          {settings?.OrderPanels?.displaySize &&
+                          item.product?.productSize
+                            ? ` (${item.product.productSize})`
+                            : ""}
+                        </Text>
+
+                        {item.selectedOptions.length > 0 && (
+                          <View style={styles.optionsPriceContainer}>
+                            {item.selectedOptions.map((option, idx) => (
+                              <Text
+                                key={idx}
+                                style={styles.optionPriceTextItem}
+                              >
+                                ({option.name})
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+
+                        {item.customInput && (
+                          <Text
+                            style={[
+                              { fontFamily: "Kanit-Regular", color: "#4682B4" },
+                            ]}
+                          >
+                            Note: {item.customInput}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.orderItemQuantityContainer}>
+                        <Text
+                          style={[
+                            {
+                              fontFamily: "GoogleSans-Regular",
+                              color: "#3a5565",
+                              fontSize: 14,
+                            },
+                          ]}
+                        >
+                          {item.quantity} x{" "}
+                          {parseFloat(item.product.price).toFixed(0)}฿
+                        </Text>
+                      </View>
+
+                      <Text style={styles.orderItemPrice}>
+                        {getDiscountedPrice(item, index)}฿
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </Swipeable>
+              ))}
+            </ScrollView>
+
+            {/* Order Summary */}
+            <View style={styles.orderTotalContainer}>
+              {/* Total Quantity */}
+              <View style={styles.orderTotalRow}>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
+                  Total Quantity:
+                </Text>
+                <Text
+                  style={[
+                    { fontFamily: "GoogleSans-Regular", textAlign: "right" },
+                  ]}
+                >
+                  {orderItems.reduce((sum, item) => sum + item.quantity, 0)}
+                </Text>
+              </View>
+
+              {/* Subtotal */}
+              <View style={styles.orderTotalRow}>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
+                  Subtotal:
+                </Text>
+                <Text
+                  style={[
+                    { fontFamily: "GoogleSans-Regular", textAlign: "right" },
+                  ]}
+                >
+                  {subtotal.toFixed(0)}฿
+                </Text>
+              </View>
+
+              {/* Discount */}
+              {settings?.OrderPanels.displayDiscount && (
+                <View style={styles.orderTotalRow}>
+                  <Text
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      color: "#3a5565",
+                    }}
+                  >
+                    Discount:
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                      color: "#3a5565",
+                    }}
+                  >
+                    {discountValue}
+                  </Text>
+                </View>
+              )}
+
+              {/* Tax */}
+              {settings?.OrderPanels.displayTax && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                    Tax ({(settings?.OrderPanels.taxValue * 100).toFixed(0)}%):
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                    }}
+                  >
+                    {tax.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+
+              {/* Service Charge */}
+              {settings?.OrderPanels.displayServiceCharge && (
+                <View style={styles.orderTotalRow}>
+                  <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                    Service Charge (
+                    {(settings.OrderPanels.serviceChargeValue * 100).toFixed(0)}
+                    %):
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                    }}
+                  >
+                    {serviceCharge.toFixed(0)}฿
+                  </Text>
+                </View>
+              )}
+
+              {selectedPaymentMethod.length > 0 && (
+                <>
+                  {/* Primary Payment Method */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                      Payment Method:
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans-Regular",
+                        textAlign: "right",
+                        fontSize: 14,
+                        color: "#3a5565",
+                      }}
+                    >
+                      {selectedPaymentMethod[0] || "N/A"}
+                      {selectedPaymentMethod[0] === "Cash"
+                        ? ` (${cashChange?.toFixed(0)}฿)`
+                        : ` (${total?.toFixed(0)}฿)`}
+                    </Text>
+                  </View>
+
+                  {/* Secondary Payment Method, if present */}
+                  {selectedPaymentMethod.length > 1 && (
+                    <View style={styles.orderTotalRow}>
+                      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                        Payment Method 2:
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: "GoogleSans-Regular",
+                          textAlign: "right",
+                          fontSize: 14,
+                          color: "#3a5565",
+                        }}
+                      >
+                        {selectedPaymentMethod[1]}
+                        {selectedPaymentMethod[1] === "Cash"
+                          ? ` (${cashChange?.toFixed(0)}฿)`
+                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
+                      </Text>
                     </View>
                   )}
 
-                  {item.customInput && (
-                    <Text style={[{ fontFamily: "Kanit-Regular", color: "#4682B4" }]}>
-                      Note: {item.customInput}
+                  {/* Change */}
+                  <View style={styles.orderTotalRow}>
+                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+                      Remaining:
                     </Text>
-                  )}
-                </View>
+                    <Text
+                      style={{
+                        fontFamily: "GoogleSans-Regular",
+                        textAlign: "right",
+                        fontSize: 14,
+                      }}
+                    >
+                      {remainbalance?.toFixed(0)}฿
+                    </Text>
+                  </View>
+                </>
+              )}
 
-                <View style={styles.orderItemQuantityContainer}>
-                  <Text style={[{ fontFamily: "GoogleSans", color: "#3a5565", fontSize: 14 }]}>
-                    {item.quantity} x {parseFloat(item.product.price).toFixed(0)}฿
-                  </Text>
-                </View>
-
-                <Text style={styles.orderItemPrice}>{getDiscountedPrice(item, index)}฿</Text>
+              {/* Remaining UI elements */}
+              <View style={styles.orderTotalRow}>
+                <Text style={[{ fontFamily: "GoogleSans-Regular" }]}>
+                  Total:
+                </Text>
+                <Text
+                  style={[
+                    {
+                      fontFamily: "GoogleSans-Regular",
+                      textAlign: "right",
+                      fontSize: 18,
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
+                  {total.toFixed(0)}฿
+                </Text>
               </View>
-            </Animated.View>
-          </Swipeable>
-        ))}
-      </ScrollView>
+            </View>
+            {total > 0 && (
+              <Animated.View
+                style={{
+                  opacity: opacity,
+                  transform: [{ translateY: translateY }],
+                }}
+              >
+                {/* Secondary Payment Option if cashChange < total */}
 
-      {/* Order Summary */}
-      <View style={styles.orderTotalContainer}>
-        <View style={styles.orderTotalRow}>
-          <Text style={[{ fontFamily: "GoogleSans" }]}>Total Quantity:</Text>
-          <Text style={[{ fontFamily: "GoogleSans", textAlign: "right" }]}>{orderItems.reduce((sum, item) => sum + item.quantity, 0)}</Text>
+                <PaymentMethodSelector
+                  onMethodSelect={handleMethodSelect}
+                  handleOpenDialer={handleOpenDialer}
+                  handleOpenQrDialer={handleQrOpenDialer}
+                />
+
+                <TouchableOpacity
+                  style={styles.proceedButton}
+                  onPress={handleProceedToPayment}
+                >
+                  <Text style={styles.proceedButtonText}>ชำระเงิน</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
         </View>
-
-        <View style={styles.orderTotalRow}>
-          <Text style={[{ fontFamily: "GoogleSans" }]}>Total:</Text>
-          <Text style={[{ fontFamily: "GoogleSans", textAlign: "right", fontSize: 18, fontWeight: "bold" }]}>{total.toFixed(0)}฿</Text>
-        </View>
-
-        {total > 0 && (
-          <Animated.View style={{ opacity: opacity, transform: [{ translateY: translateY }] }}>
-            <TouchableOpacity style={styles.proceedButton} onPress={() => { incrementReceiptNumber(); incrementQueueNumber(); }}>
-              <Text style={styles.proceedButtonText}>Proceed to Payment</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-      </View>
-    </View>
-  </View>
-)}
-
+      )}
     </View>
   );
 };
@@ -1739,7 +2141,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   orderItemPrice: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 16,
     color: "#333",
   },
@@ -1751,12 +2153,32 @@ const styles = StyleSheet.create({
   drawerToggleButton: {
     backgroundColor: "#3a5565",
     height: 52,
-    opacity: 0.8,
-    padding: 10,
+    opacity: 0.5,
+    padding: 1,
     borderRadius: 40,
     position: "absolute",
-    bottom: 50,
-    right: 0,
+    bottom: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  drawerToggleButtonweb: {
+    backgroundColor: "#3a5565",
+    height: 52,
+    width: 52,
+    opacity: 0.5,
+    padding: 1,
+    borderRadius: 26,
+    position: "absolute",
+    bottom: 60,
+    right: 20,
+    zIndex: 1000,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   animatedDrawer: {
     backgroundColor: "#fff",
@@ -1832,7 +2254,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#3a5565",
   },
   tabText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 16,
     color: "#6d7d85",
   },
@@ -1985,7 +2407,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   optionPriceTextItem: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "#888",
     fontSize: 12,
     marginLeft: 4,
@@ -2001,7 +2423,7 @@ const styles = StyleSheet.create({
     marginVertical: 5,
   },
   actionText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isMobile ? 10 : 12,
   },
   orderItemSwipeableContainer: {
@@ -2116,7 +2538,7 @@ const styles = StyleSheet.create({
   },
   discountInput: {
     flex: 1,
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     borderWidth: 1,
     borderColor: "#ddd", // Softer border color for a modern look
     borderRadius: 2, // Rounded corners for a cleaner design
@@ -2153,7 +2575,7 @@ const styles = StyleSheet.create({
   },
 
   saveButtonText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "#fff", // White text for contrast
     fontSize: 10, // Small text for a sleek appearance
     fontWeight: "bold", // Bold text to make the button stand out

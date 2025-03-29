@@ -6,9 +6,14 @@ import {
   StyleSheet,
   Dimensions,
   Alert,
+  Platform 
 } from "react-native";
+import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from "expo-linear-gradient";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from 'expo-secure-store';
+import { ref, set } from "firebase/database";
+import { db } from "../utils/firebase"; // make sure this path is correct
+ 
 
 const PasscodeButton = ({
   number,
@@ -21,27 +26,58 @@ const PasscodeButton = ({
     <Text style={styles.number}>{number}</Text>
   </TouchableOpacity>
 );
-
 export default function CreatePasscodeScreen() {
+  const navigation = useNavigation();
   const [passcode, setPasscode] = useState<string[]>([]);
   const [confirmPasscode, setConfirmPasscode] = useState<string[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
   const [message, setMessage] = useState<string>("Enter a new passcode:");
+ 
+ 
+ 
 
+  const savePasscode = async (passcode: string) => {
+    try {
+      // ตรวจสอบ Platform ก่อนใช้ SecureStore
+      if (Platform.OS !== 'web') {
+        await SecureStore.setItemAsync("userPasscode", passcode);
+        console.log("Passcode saved to SecureStore");
+      }
+  
+      // ส่วนของ Firebase ยังทำงานได้บนเว็บ
+      const userId = "user1";
+      const passcodeRef = ref(db, "passcodes/" + userId);
+      await set(passcodeRef, {
+        passcode: passcode,
+        createdAt: new Date().toISOString(),
+      });
+  
+      console.log("✅ Passcode saved to Firebase");
+      return true;
+    } catch (error) {
+      console.error("Error:", error);
+      Alert.alert("Error", "Failed to save passcode");
+      return false;
+    }
+  };
+  
   const handlePress = async (number: string) => {
     const currentPasscode = isConfirming ? confirmPasscode : passcode;
-
+  
     if (currentPasscode.length >= 6) return;
-
+  
     const newPasscode = [...currentPasscode, number];
     isConfirming ? setConfirmPasscode(newPasscode) : setPasscode(newPasscode);
-
+  
     if (newPasscode.length === 6) {
       if (isConfirming) {
         if (newPasscode.join("") === passcode.join("")) {
-          await savePasscode(newPasscode.join(""));
-          Alert.alert("Success", "Passcode created successfully!");
-          resetState("Passcode set successfully!");
+          const saveResult = await savePasscode(newPasscode.join(""));
+          if (saveResult) {
+            Alert.alert("Success", "Passcode created successfully!");
+            resetState("Passcode set successfully!");
+             
+          }
         } else {
           handleMismatch();
         }
@@ -66,18 +102,6 @@ export default function CreatePasscodeScreen() {
     setMessage(newMessage);
   };
 
-  const savePasscode = async (passcode: string) => {
-    try {
-      console.log("Saving Passcode: ", passcode);
-      await SecureStore.setItemAsync("userPasscode", passcode);
-      console.log("Passcode saved successfully!");
-      const savedPasscode = await SecureStore.getItemAsync("userPasscode");
-      console.log("Verified Saved Passcode: ", savedPasscode);
-    } catch (error) {
-      console.error("Error saving passcode: ", error);
-      Alert.alert("Error", "Failed to save passcode securely.");
-    }
-  };
  
 
   const handleBackspace = () => {

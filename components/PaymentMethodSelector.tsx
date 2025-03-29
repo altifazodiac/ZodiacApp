@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
+import Icon from "react-native-vector-icons/Ionicons"; // ใช้ Ionicons จาก react-native-vector-icons
+
 
 interface PaymentMethodSelectorProps {
   onMethodSelect: (method: string) => void;
@@ -24,7 +25,6 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
     setSelectedMethods(newSelectedMethods);
     onMethodSelect(method);
 
-    // Open modals only if method is selected (not unselected)
     if (!isMethodSelected) {
       if (method === "Cash") {
         handleOpenDialer();
@@ -45,7 +45,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           ]}
           onPress={() => handleMethodToggle("Cash")}
         >
-          <Ionicons
+          <Icon
             name="cash-outline"
             size={16}
             color={selectedMethods.includes("Cash") ? "#3a5565" : "#6e6e6e"}
@@ -67,8 +67,8 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           ]}
           onPress={() => handleMethodToggle("Card")}
         >
-          <FontAwesome5
-            name="credit-card"
+          <Icon
+            name="card-outline"
             size={16}
             color={selectedMethods.includes("Card") ? "#3a5565" : "#6e6e6e"}
           />
@@ -89,7 +89,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           ]}
           onPress={() => handleMethodToggle("Scan")}
         >
-          <Ionicons
+          <Icon
             name="qr-code-outline"
             size={16}
             color={selectedMethods.includes("Scan") ? "#3a5565" : "#6e6e6e"}
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   title: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 14,
     fontWeight: "bold",
     marginBottom: 8,
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#d0dce1",
   },
   buttonText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 14,
     color: "#6e6e6e",
     marginLeft: 4,

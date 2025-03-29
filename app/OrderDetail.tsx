@@ -17,7 +17,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { ref, onValue, remove, update, push, set } from 'firebase/database';
-import { database } from './firebase';  
+import { database } from "../utils/firebase";  
 import styled from 'styled-components/native';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 
@@ -360,10 +360,7 @@ const styles = StyleSheet.create({
     marginVertical: 5,
     backgroundColor: '#fff',
     borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     elevation: 2,
   },
   drawer: {
@@ -374,10 +371,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
     elevation: 5,
   },
   input: {

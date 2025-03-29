@@ -229,14 +229,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loginHeader: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 24,
-    color: "#fff",
+    color: "#000",
     fontWeight: "600",
     marginBottom: 10,
   },
   loginSubheader: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 14,
     color: "#aaa",
     textAlign: "center",
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   input: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     borderColor: "#ddd",
     borderWidth: 1,
     color: "#2c3e50",
@@ -275,11 +275,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rememberText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "gray",
   },
   forgotPassword: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "gray",
   },
   continueButton: {
@@ -291,18 +291,18 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   continueButtonText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: 14,
     fontWeight: "bold",
     color: "#fff",
   },
   signupText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "#aaa",
     fontSize: 14,
   },
   signupLink: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     color: "#2c3e50",
     fontWeight: "600",
   },

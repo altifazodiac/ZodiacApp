@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Button, Animated, Platform, Alert as RNAlert } from 'react-native';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set } from 'firebase/database'; // Import database functions
-import { firebaseConfig } from './firebase'; // Ensure this file exists and is correctly set up
+import { firebaseConfig } from "../utils/firebase"; // Ensure this file exists and is correctly set up
 
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
