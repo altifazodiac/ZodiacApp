@@ -146,7 +146,7 @@ export default function PasscodeScreen() {
       } else {
         setInputPasscode([]);
         setAttempts(prev => prev + 1);
-        setMessage(`Incorrect passcode. Attempts: ${attempts + 1}/5`);
+        setMessage(`รหัสผ่านไม่ถูกต้อง : ${attempts + 1}/5`);
         
         // Vibrate on wrong passcode (mobile only)
         if (Platform.OS !== 'web') {
@@ -235,7 +235,7 @@ export default function PasscodeScreen() {
       end={{ x: 1, y: 1 }}
     >
       <View style={styles.container}>
-        <Text style={styles.title}>Enter Passcode</Text>
+        <Text style={styles.title}>ป้อนรหัส</Text>
         
         {message && (
           <Text style={[
@@ -314,6 +314,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
+    fontFamily:"kanit",
     fontSize: isTablet ? 24 : 20,
     fontWeight: "600",
     color: "#263c48",
@@ -367,6 +368,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   number: {
+    fontFamily: "GoogleSans-Regular",
     fontSize: isTablet ? 36 : 28,
     fontWeight: "600",
     color: "#fff",

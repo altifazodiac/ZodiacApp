@@ -44,7 +44,9 @@ import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
 import { curry } from "lodash";
 import EditNoteModal from "../components/EditNoteModal";
-import Icon from "react-native-vector-icons/Ionicons";
+import { FaChevronCircleDown, FaChevronCircleUp,FaUser, FaCalendarAlt, FaClock,FaPrint, FaTrashAlt  } from "react-icons/fa"; // นำเข้าไอคอนจาก Font Awesome
+import { IoChevronForwardOutline } from "react-icons/io5";
+import { format } from 'date-fns';
 
 declare const window: any;
 const windowWidth = Dimensions.get("window").width;
@@ -113,7 +115,7 @@ const Orders = () => {
   };
   const [isQrDialerVisible, setQrIsDialerVisible] = useState(false);
   const [isQRModalVisible, setQRModalVisible] = useState(false);
-  const mobileNumber = "0924694099"; // Replace with customer mobile number
+  const mobileNumber = "0651199354"; // Replace with customer mobile number
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingOrderIndex, setEditingOrderIndex] = useState<number | null>(
@@ -482,21 +484,29 @@ const Orders = () => {
   };
 
   const confirmClearOrderItems = () => {
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      const isConfirmed = window.confirm(
-        "Are you sure you want to clear all items?"
-      );
+    if (Platform.OS === 'web') {
+      // Web implementation
+      const isConfirmed = window.confirm('Are you sure you want to clear all items?');
       if (isConfirmed) {
-        clearOrderState(); // Reset state for web
+        clearOrderState();
       }
     } else {
-      window.alert(
-        "Clear All Items",
-        "Are you sure you want to clear all items?",
+      // React Native implementation
+      Alert.alert(
+        'Clear All Items',
+        'Are you sure you want to clear all items?',
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Yes", onPress: clearOrderState }, // Reset state for mobile
-        ]
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Yes',
+            onPress: clearOrderState,
+            style: 'destructive', // Optional: makes it red on iOS
+          },
+        ],
+        { cancelable: true } // Allows dismissing by tapping outside
       );
     }
   };
@@ -917,7 +927,9 @@ const Orders = () => {
       if (items.length === 0) {
         throw new Error("No valid items to save");
       }
-
+      const now = new Date();
+      const timezoneOffset = 7 * 60; // Bangkok UTC+7 (หน่วยเป็นนาที)
+      const localTime = new Date(now.getTime() + timezoneOffset * 60 * 1000);
       const orderData = {
         receiptNumber,
         queueNumber,
@@ -930,7 +942,7 @@ const Orders = () => {
         cashChange,
         remainBalance,
         paymentMethods: selectedPaymentMethod,
-        orderDate: new Date().toISOString(),
+        orderDate: localTime.toISOString().replace('T', ' ').replace(/\..+/, ''), // แปลงเป็น ISO string และลบ milliseconds
       };
 
       console.log("Saving order data:", orderData); // สำหรับ debug
@@ -1108,15 +1120,12 @@ const Orders = () => {
                     backgroundColor: isDrawerOpen ? "#3a5565" : "#3a5565",
                   }}
                 >
-                  <Icon
-                    name={
-                      isDrawerOpen
-                        ? "chevron-down-circle-outline"
-                        : "chevron-up-circle-outline"
-                    }
-                    size={32}
-                    color="#fff"
-                  />
+                  
+                  {isDrawerOpen ? (
+  <FaChevronCircleDown size={32} color="#fff" />
+) : (
+  <FaChevronCircleUp size={32} color="#fff" />
+)}
                 </TouchableOpacity>
               </Animated.View>
             )}
@@ -1163,48 +1172,40 @@ const Orders = () => {
               </ScrollView>
               {categories.length > 4 && (
                 <View style={styles.scrollHintIcon}>
-                  <Icon
-                    name="chevron-forward-outline"
-                    size={24}
-                    color={"#3c5867"}
-                  />
+                 <IoChevronForwardOutline size={24} color={"#3c5867"} />
                 </View>
               )}
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <FlatList
-                data={filteredProducts}
-                renderItem={renderProductItem}
-                keyExtractor={(item) => item.id}
-                numColumns={numColumns} // Dynamically calculated columns
-                key={numColumns} // Forces re-render when columns change
-                initialNumToRender={numColumns * 2}
-                contentContainerStyle={styles.productListContainer}
-              />
-            </ScrollView>
+          {/* Fixed toggle button (outside ScrollView) */}
+  {isMobile && (
+     <Animated.View style={[styles.drawerToggleButtonweb]}>
+     <TouchableOpacity
+       onPress={toggleDrawer}
+       style={{
+        
+       }}
+     >
+       {isDrawerOpen ? (
+  <FaChevronCircleDown size={32} color="#fff" />
+) : (
+  <FaChevronCircleUp size={32} color="#fff" />
+)}
+     </TouchableOpacity>
+   </Animated.View>
+  )}
+  {/* Main content with scrolling */}
+  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <FlatList
+      data={filteredProducts}
+      renderItem={renderProductItem}
+      keyExtractor={(item) => item.id}
+      numColumns={numColumns}
+      key={numColumns}
+      initialNumToRender={numColumns * 2}
+      contentContainerStyle={styles.productListContainer}
+    />
+  </ScrollView>
 
-            {isMobile && (
-              <Animated.View style={[styles.drawerToggleButtonweb]}>
-                <TouchableOpacity
-                  onPress={toggleDrawer}
-                  style={{
-                    padding: 10,
-                    borderRadius: 50,
-                    backgroundColor: isDrawerOpen ? "#3a5565" : "#3a5565",
-                  }}
-                >
-                  <Icon
-                    name={
-                      isDrawerOpen
-                        ? "chevron-down-circle-outline"
-                        : "chevron-up-circle-outline"
-                    }
-                    size={32}
-                    color="#fff"
-                  />
-                </TouchableOpacity>
-              </Animated.View>
-            )}
           </View>
         )}
       </View>
@@ -1256,28 +1257,28 @@ const Orders = () => {
                 <TouchableOpacity
                   style={[styles.circleButton, { marginRight: 5 }]}
                 >
-                  <Icon name="print-outline" size={16} />
+                 <FaPrint size={16} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.circleButton}
                   onPress={confirmClearOrderItems}
                 >
-                  <Icon name="trash-outline" size={16} color="red" />
+                 <FaTrashAlt size={16} color="red" />
                 </TouchableOpacity>
               </View>
             </View>
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="person-outline" size={16} />
+              <FaUser size={16} />
                 <Text style={styles.orderHeaderText}> Cashier 1</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="calendar-outline" size={16} color={"#3c5867"} />
+              <FaCalendarAlt size={16} color={"#3c5867"} />
                 <Text style={styles.dateText}> {formattedDate}</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="time-outline" size={16} color={"#3c5867"} />
+              <FaClock size={16} color={"#3c5867"} />
                 <View style={styles.timeContainer}>
                   <Animated.Text
                     style={[
@@ -1677,13 +1678,13 @@ const Orders = () => {
                 <TouchableOpacity
                   style={[styles.circleButton, { marginRight: 5 }]}
                 >
-                  <AntDesign name="printer" size={16} color="black" />
+                 <FaPrint size={16} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.circleButton}
                   onPress={confirmClearOrderItems}
                 >
-                  <Icon name="trash-outline" size={16} color="#E21818" />
+                 <FaTrashAlt size={16} color="#E21818" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1691,15 +1692,14 @@ const Orders = () => {
             {/* Order Details */}
             <View style={styles.orderHeader}>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="person-circle-outline" size={18} color="#3c5867" />
+              <FaUser size={16} />
                 <Text style={styles.orderHeaderText}> Cashier 1</Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="calendar-outline" size={18} color="#3c5867" />
-                <Text style={styles.dateText}>{formattedDate}</Text>
+              <FaCalendarAlt size={16} color={"#3c5867"} />
               </View>
               <View style={styles.orderHeaderGroup}>
-                <Icon name="time-outline" size={18} color="#3c5867" />
+              <FaClock size={16} color={"#3c5867"} />
                 <View style={styles.timeContainer}>
                   <Animated.Text
                     style={[
@@ -2164,21 +2164,13 @@ const styles = StyleSheet.create({
   drawerToggleButtonweb: {
     backgroundColor: "#3a5565",
     height: 52,
-    width: 52,
     opacity: 0.5,
     padding: 1,
-    borderRadius: 26,
+    borderRadius: 40,
     position: "absolute",
-    bottom: 60,
+    bottom: 20,
     right: 20,
-    zIndex: 1000,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    zIndex: 1001,
   },
   animatedDrawer: {
     backgroundColor: "#fff",
@@ -2437,15 +2429,18 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   orderHeaderText: {
+    fontFamily: "GoogleSans-Regular",
     color: "#444",
     fontSize: 14,
   },
   orderHeaderReceiptText: {
+    fontFamily: "GoogleSans-Regular",
     color: "#444",
     fontSize: 18,
     fontWeight: "bold",
   },
   dateText: {
+    fontFamily: "GoogleSans-Regular",
     fontSize: 14,
     color: "#606060",
   },

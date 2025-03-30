@@ -25,7 +25,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } fr
 import { runOnJS } from 'react-native-reanimated'; 
 import { getDatabase, ref as databaseRef, get, update } from 'firebase/database';
 import RNPickerSelect from 'react-native-picker-select'; // Import statement
-import Icon from "react-native-vector-icons/Ionicons";
+import { FaTrash, FaCloudUploadAlt, FaFilter, FaPlus, FaEdit, FaEye } from "react-icons/fa"; // นำเข้าไอคอนจาก Font Awesome
 
  
 
@@ -646,13 +646,13 @@ const Products = () => {
   />
  {imageUrl && (
   <TouchableOpacity onPress={handleRemoveImage} style={styles.removeButton}>
-    <Icon name="trash" size={16} color="#fff" />
+   <FaTrash size={16} color="#fff" />
   </TouchableOpacity>
 )}
 </View>
 <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
-  <Icon name="upload" size={18} color="#fff" />
-  <Text style={styles.uploadButtonText}>Upload Image</Text>
+<FaCloudUploadAlt size={18} color="#fff" />
+  <Text style={styles.uploadButtonText}>อัพโหลดรูป</Text>
 </TouchableOpacity>
           <View style={styles.inputContainer}>
           <View style={styles.formGroup}>
@@ -666,7 +666,7 @@ const Products = () => {
 />
 </View>
           <RNPickerSelect
-      placeholder={{ label: "Select a Category" }}
+      placeholder={{ label: "เลือกหมวดหมู่" }}
       items={categories.map(category => ({ label: category.name, value: category.id }))}
       onValueChange={(value) => setCategoryId(value)}
       style={{ ...pickerSelectStyles, 
@@ -679,22 +679,26 @@ const Products = () => {
       useNativeAndroidPickerStyle={false} 
     /> 
 </View>
-           <TextInput
+<TextInput
             style={styles.input}
-            placeholder="Product Name"
-            value={productName}
-            onChangeText={setProductName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Display Name"
+            placeholder="ชื่อสินค้าไทย"
+            placeholderTextColor="#B0B0B0"
             value={nameDisplay} 
             onChangeText={setNameDisplay} 
           />
+           <TextInput
+            style={styles.input}
+            placeholder="ชื่อสินค้าอังกฤษ"
+            placeholderTextColor="#B0B0B0"
+            value={productName}
+            onChangeText={setProductName}
+          />
+         
           <ProductSizeSelector productSize={productSize} setProductSizes={setProductSize} />
           <TextInput
             style={styles.input}
-            placeholder="Product Price"
+            placeholder="ราคาขาย"
+            placeholderTextColor="#B0B0B0"
             value={productPrice}
             onChangeText={setProductPrice}
             keyboardType="numeric"
@@ -702,21 +706,24 @@ const Products = () => {
         
           <TextInput
             style={styles.input}
-            placeholder="Cost Price"
+            placeholder="ราคาต้นทุน"
+            placeholderTextColor="#B0B0B0"
             value={costPrice}
             onChangeText={setCostPrice}
             keyboardType="numeric"
           />
           <TextInput
             style={styles.input}
-            placeholder="Quantity"
+            placeholder="จำนวนสินค้า"
+            placeholderTextColor="#B0B0B0"
             value={quantity}
             onChangeText={setQuantity}
             keyboardType="numeric"
           />
           <TextInput
             style={styles.input}
-            placeholder="Reorder Level"  
+            placeholder="จุดสั่งซื้อสินค้าใหม่"  
+            placeholderTextColor="#B0B0B0"
             value={reorderLevel}  
             onChangeText={setReorderLevel}  
             keyboardType="numeric"
@@ -724,14 +731,16 @@ const Products = () => {
          <UnitSelector unit={unit} setUnit={setUnit} />
           <TextInput
             style={styles.input}
-            placeholder="Product Barcode (optional)"  
+            placeholder="บาร์โค้ดสินค้า(ระเว้นว่างถ้าไม่มี)"  
+            placeholderTextColor="#B0B0B0"
             value={productBarcode} 
             onChangeText={setProductBarcode} 
           />
           
           <TextInput
   style={styles.input}
-  placeholder="Description (optional)"  // Clarify that it's optional
+  placeholder="คำอธิบาย(ระเว้นว่างถ้าไม่มี)"  
+  placeholderTextColor="#B0B0B0"
   value={productDescription}
   onChangeText={setProductDescription}
 />
@@ -742,12 +751,12 @@ const Products = () => {
               onValueChange={setStatus}
               style={styles.switch}
             />
-            <Text style={styles.switchLabel}>{status ? 'Active' : 'Inactive'}</Text>
+            <Text style={styles.switchLabel}>{status ? 'แสดง' : 'ไม่แสดง'}</Text>
           </View>
   
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.button} onPress={handleAddOrUpdateProduct}>
-              <Text style={styles.buttonText}>{editId ? 'Update' : 'Submit'}</Text>
+              <Text style={styles.buttonText}>{editId ? 'อัพเดท' : 'เพิ่มสินค้า'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
   style={styles.button}
@@ -756,7 +765,7 @@ const Products = () => {
     resetForm();
   }}
 >
-  <Text style={styles.buttonText}>Close</Text>
+  <Text style={styles.buttonText}>ปิด</Text>
 </TouchableOpacity>
           </View>
         </View>
@@ -767,17 +776,17 @@ const Products = () => {
   const renderFilterDrawerContent = () => (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.card}>
-        <Text style={styles.drawerHeading}>Filter Products</Text>
+        <Text style={styles.drawerHeading}>ค้นหาสินค้า</Text>
   
         <TextInput
           style={styles.input}
-          placeholder="Search by Product Name"
+          placeholder="ค้นหาตามชื่อสินค้า"
           value={searchName}
           onChangeText={setSearchName}
         />
   
         <RNPickerSelect
-          placeholder={{ label: "Search by Category", value: '' }}
+          placeholder={{ label: "ค้นหาตามหมวดหมู่", value: '' }}
           items={categories.map(category => ({ label: category.name, value: category.id }))}
           onValueChange={(value) => setSearchCategory(value)}
           style={{
@@ -793,14 +802,16 @@ const Products = () => {
   <View style={styles.PriceContainer}> 
   <TextInput
     style={styles.inputHalf}  // Use inputHalf style
-    placeholder="Min Price"
+    placeholder="ราคาขั้นต่ำ"
+    placeholderTextColor="#B0B0B0"
     value={minPrice}
     onChangeText={setMinPrice}
     keyboardType="numeric"
   />
   <TextInput
     style={styles.inputHalf}  // Use inputHalf style
-    placeholder="Max Price"
+    placeholder="ราคาสูงสุด"
+    placeholderTextColor="#B0B0B0"
     value={maxPrice}
     onChangeText={setMaxPrice}
     keyboardType="numeric"
@@ -809,14 +820,16 @@ const Products = () => {
    <View style={styles.PriceContainer}> 
   <TextInput
     style={styles.inputHalf}  // Use inputHalf style
-    placeholder="Min Quantity"
+    placeholder="ปริมาณขั้นต่ำ"
+    placeholderTextColor="#B0B0B0"
     value={minQuantity}
     onChangeText={setMinQuantity}
     keyboardType="numeric"
   />
   <TextInput
     style={styles.inputHalf}  // Use inputHalf style
-    placeholder="Max Quantity"
+    placeholder="ปริมาณสูงสุด"
+    placeholderTextColor="#B0B0B0"
     value={maxQuantity}
     onChangeText={setMaxQuantity}
     keyboardType="numeric"
@@ -830,14 +843,14 @@ const Products = () => {
   }} 
   style={styles.button}
 >
-  <Text style={styles.buttonText}>Search</Text>
+  <Text style={styles.buttonText}>ค้นหา</Text>
 </TouchableOpacity>
 
           <TouchableOpacity onPress={resetFilters} style={styles.button}>
-            <Text style={styles.buttonText}>Reset</Text>
+            <Text style={styles.buttonText}>ล้างข้อมูล</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleFilterDrawer} style={styles.button}>
-            <Text style={styles.buttonText}>Close</Text>
+            <Text style={styles.buttonText}>ปิด</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -848,12 +861,12 @@ const Products = () => {
        <View style={styles.PriceContainer}> 
       
     <TouchableOpacity onPress={toggleFilterDrawer} style={styles.drawerToggleButton}>
-      <Icon name="filter" size={20} color="#fff" />
-      <Text style={[styles.drawerToggleText,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>Show Filters</Text>
+    <FaFilter size={20} color="#fff" />
+      <Text style={[styles.drawerToggleText,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>ค้นหาสินค้า</Text>
     </TouchableOpacity>
     <TouchableOpacity onPress={toggleFormDrawer} style={styles.drawerToggleButton}>
-      <Icon name="add" size={20} color="#fff" />
-     <Text style={[styles.drawerToggleText,,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>Add New Item</Text>
+    <FaPlus size={20} color="#fff" />
+     <Text style={[styles.drawerToggleText,,{fontFamily:'GoogleSans-Regular,Kanit-Regular'}]}>เพิ่มสินค้าใหม่</Text>
     </TouchableOpacity>
 </View>
     <Modal visible={formDrawerVisible} transparent={true} animationType="none">
@@ -933,25 +946,25 @@ const ProductItem = ({
       {item.imageUrl ? (
         <Image source={{ uri: item.imageUrl }} style={styles.smallProductImage} />
       ) : (
-        <Text>No Image</Text>
+        <Text>ไม่มีรูป</Text>
       )}
       <View>
         <Text style={[{fontFamily:'Kanit-Regular'}]}>{item.nameDisplay}</Text>
         <Text style={[{fontFamily:'GoogleSans-Regular'}]}>{categories.find(c => c.id === item.categoryId)?.name || 'Unknown'}</Text> 
       </View>
       <View>
-        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Size: {item.productSize}</Text>
-        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Unit: {item.unit}</Text> 
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>ขนาด: {item.productSize}</Text>
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>จำนวน: {item.unit}</Text> 
       </View>
       <View>
-        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>Price: {item.price}</Text>
+        <Text style={[{fontFamily:'GoogleSans-Regular'}]}>ราคา: {item.price}</Text>
         <Text style={[{ color: item.status ? 'green' : 'red' }, {fontFamily:'GoogleSans-Regular'}]}>
-          {item.status ? 'Active' : 'Inactive'}
+          {item.status ? 'แสดง' : 'ไม่แสดง'}
         </Text>
       </View>
       <View style={styles.buttonGroup}>
         <TouchableOpacity onPress={() => onEdit(item)}>
-          <Icon name="pencil" size={24} color="#9969c7" />
+        <FaEdit size={24} color="#9969c7" />
           
         </TouchableOpacity>
         <TouchableOpacity 
@@ -959,10 +972,10 @@ const ProductItem = ({
   style={styles.buttonMargin}
   delayPressIn={100} // Add a small delay
 >
-          <Icon name="trash" size={24} color="#9969c7" />
+          <FaTrash  size={24} color="#9969c7" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => console.log('View Product')} style={styles.buttonMargin}>
-          <Icon name="eye" size={24} color="#9969c7" />
+        <FaEye size={24} color="#9969c7" />
 </TouchableOpacity>
       </View>
     </Animated.View>

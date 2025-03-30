@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import Icon from "react-native-vector-icons/Ionicons"; // ใช้ Ionicons จาก react-native-vector-icons
-
+import { FaMoneyBillAlt, FaCreditCard, FaQrcode } from 'react-icons/fa'; // นำเข้าไอคอนจาก Font Awesome
 
 interface PaymentMethodSelectorProps {
   onMethodSelect: (method: string) => void;
@@ -45,8 +44,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           ]}
           onPress={() => handleMethodToggle("Cash")}
         >
-          <Icon
-            name="cash-outline"
+          <FaMoneyBillAlt
             size={16}
             color={selectedMethods.includes("Cash") ? "#3a5565" : "#6e6e6e"}
           />
@@ -60,15 +58,14 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity disabled
           style={[
             styles.button,
             selectedMethods.includes("Card") && styles.selectedButton,
           ]}
-          onPress={() => handleMethodToggle("Card")}
+          //onPress={() => handleMethodToggle("Card")}
         >
-          <Icon
-            name="card-outline"
+          <FaCreditCard
             size={16}
             color={selectedMethods.includes("Card") ? "#3a5565" : "#6e6e6e"}
           />
@@ -89,8 +86,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           ]}
           onPress={() => handleMethodToggle("Scan")}
         >
-          <Icon
-            name="qr-code-outline"
+          <FaQrcode
             size={16}
             color={selectedMethods.includes("Scan") ? "#3a5565" : "#6e6e6e"}
           />

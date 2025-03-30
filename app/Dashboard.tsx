@@ -658,7 +658,7 @@ if (Array.isArray(order.items)) {
       {/* Card Display */}
       <LinearGradient colors={['#1e3a8a', '#2563eb']} style={tailwind`rounded-xl p-4 mb-4`}>
   <Text style={tailwind`text-white text-2xl mb-2`}>฿{totalIncome.toFixed(0)}</Text>
-  <Text style={tailwind`text-gray-300`}>ยอขายรวมทั้งหมด</Text>
+  <Text style={tailwind`text-gray-300`}>ยอดขายรวมทั้งหมด</Text>
   <Text style={tailwind`text-gray-300`}>Current Month</Text>
   <View style={tailwind`flex-row mt-4 justify-between`}>
     <Button text="Send" />

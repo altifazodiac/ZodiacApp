@@ -25,7 +25,7 @@ import { database } from "../utils/firebase";
 import styled from 'styled-components/native';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { MenuProvider } from 'react-native-popup-menu'; 
-import Icon from "react-native-vector-icons/Ionicons"; // ใช้ Ionicons จาก react-native-vector-icons
+import { FaTrash, FaCloudUploadAlt, FaFilter, FaPlus, FaEdit, FaEye,FaTimesCircle  } from "react-icons/fa"; // นำเข้าไอคอนจาก Font Awesome
 
 type Category = {
   id: string;
@@ -214,13 +214,13 @@ const CategoryScreen = () => {
         <SearchInput style ={[{fontFamily:'GoogleSans,Kanit-Regular'}]}
           value={searchQuery}
           onChangeText={handleSearchChange}
-          placeholder="Search categories"
-          placeholderTextColor="#B0B0B0"  // Light gray color
+          placeholder="ค้นหาหมวดหมู่"
+          placeholderTextColor="#B0B0B0"  
           accessibilityLabel="Search categories" 
         />
         {searchQuery !== '' && (
           <ClearButton onPress={resetSearch} accessibilityRole="button" accessibilityLabel="Clear search input">
-            <Icon name="close-circle" size={20} color="gray" />
+           <FaTimesCircle size={20} color="gray" />
           </ClearButton>
         )}
        <AddButton
@@ -234,7 +234,7 @@ const CategoryScreen = () => {
     display: 'flex',           // Make it a flex container
   }}
 >
-  <Icon name="pencil" size={20} color="#fff" />
+<FaEdit size={24} color="#fff" />
 </AddButton>
       </SearchBarContainer>
       {loading ? (
@@ -252,10 +252,10 @@ const CategoryScreen = () => {
               />
               <View style={styles.buttonGroup}>
               <TouchableOpacity onPress={() => handleEdit(item)} >
-                <Icon name="pencil" size={24} color="#9969c7" />
+              <FaEdit size={24} color="#9969c7" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.buttonMargin}>
-  <Icon name="trash" size={24} color="#9969c7" />
+  <FaTrash  size={24} color="#9969c7" />
 </TouchableOpacity>
             </View>
             </View>
@@ -283,7 +283,8 @@ const CategoryScreen = () => {
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder={isEditing ? 'Edit Category Name' : 'Create Category Name'}
+            placeholder={isEditing ? 'แก้ไขชื่อหมวดหมู่' : 'สร้างชื่อหมวดหมู่'}
+            placeholderTextColor="#B0B0B0"
             style={styles.input}
           />
           <View style={styles.switchContainer}>
@@ -292,14 +293,14 @@ const CategoryScreen = () => {
               onValueChange={setStatus}
               style={styles.switch}
             />
-            <Text style={styles.switchLabel}>{status ? 'Active' : 'Inactive'}</Text>
+            <Text style={styles.switchLabel}>{status ? 'แสดง' : 'ไม่แสดง'}</Text>
           </View>
           <View style={styles.buttonContainer}>
             <TouchableOpacity onPress={handleCreate} style={styles.createButton}>
-              <Text style={styles.buttonText}>{isEditing ? 'Update' : 'Create'}</Text>
+              <Text style={styles.buttonText}>{isEditing ? 'แก้ไข' : 'สร้างใหม่'}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={closeDrawer} style={styles.closeButton}>
-              <Text style={styles.buttonText}>Close</Text>
+              <Text style={styles.buttonText}>ปิด</Text>
             </TouchableOpacity>
           </View>
            

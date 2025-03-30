@@ -12,9 +12,9 @@ import Setting from './Setting';
 import MemberRegister from './MemberRegister';
 import SignUp from './SignUp';
 import CreatePasscode from './CreatePasscode';
-import DisplayPasscode from './DisplayPasscodeScreen';
+import Passcode from './Passcode';
 import Dashboard from './Dashboard';
-import Icon from "react-native-vector-icons/Ionicons"; 
+import { FaLock, FaTachometerAlt, FaReceipt, FaFileAlt, FaTags, FaThLarge, FaCog, FaUserPlus, FaBars } from 'react-icons/fa'; // นำเข้าไอคอนจาก Font Awesome
 
 const Drawer = createDrawerNavigator();
 
@@ -22,100 +22,92 @@ const DrawerLayout = () => {
   const colorScheme = useColorScheme();  
 
   return (
-    <Drawer.Navigator  
-      initialRouteName="Dashboard"
-      screenOptions={({ navigation }) => ({
-        drawerActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: true,
-        headerLeft: () => (
-          <Pressable
-            onPress={() => navigation.toggleDrawer()}
-            style={{ marginLeft: 10 }}
-          >
-            <Icon name="menu" size={24} color={Colors[colorScheme ?? 'light'].text} />
-          </Pressable>
-        ),
-      })}
-    >
-      <Drawer.Screen
-        name="Dashboard"
-        options={{
-          title: 'Dashboard',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="speedometer-outline" color={color} size={24} />
-          ),
-        }}
-        component={Dashboard}
-      />
-
-      <Drawer.Screen
-        name="Orders"
-        options={{
-          title: 'Orders',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="receipt-outline" color={color} size={24} />
-          ),
-        }}
-        component={Orders}
-      />
-
-      <Drawer.Screen
-        name="OrderDetail"
-        options={{
-          title: 'Order Detail',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="document-text-outline" color={color} size={24} />
-          ),
-        }}
-        component={OrderDetail}
-      />
-
-      <Drawer.Screen
-        name="products"
-        options={{
-          title: 'Products',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="pricetags-outline" color={color} size={24} />
-          ),
-        }}
-        component={Products}
-      />
-
-      <Drawer.Screen
-        name="CategoryScreen"
-        options={{
-          title: 'Categories',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="apps-outline" color={color} size={24} />
-          ),
-        }}
-        component={CategoryScreen}
-      />
-
-      <Drawer.Screen
-        name="Setting"
-        options={{
-          title: 'Setting',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="settings-outline" color={color} size={24} />
-          ),
-        }}
-        component={Setting}
-      />
-
-      <Drawer.Screen
-        name="MemberRegister"
-        options={{
-          title: 'Member Register',
-          drawerIcon: ({ color, focused }) => (
-            <Icon name="person-add-outline" color={color} size={24} />
-          ),
-        }}
-        component={MemberRegister}
-      />
-
-      {/* เอาหน้า Passcode และ CreatePasscode ออกจาก Drawer */}
-    </Drawer.Navigator>
+    <Drawer.Navigator
+    initialRouteName="Passcode"
+    screenOptions={({ navigation }) => ({
+      drawerActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+      headerShown: true,
+      headerTitleStyle: { fontFamily: 'Kanit-Regular' }, // กำหนดฟอนต์ Kanit สำหรับหัวข้อ
+      drawerLabelStyle: { fontFamily: 'Kanit-Regular' }, // กำหนดฟอนต์ Kanit สำหรับป้ายกำกับใน Drawer
+      headerLeft: () => (
+        <Pressable
+          onPress={() => navigation.toggleDrawer()}
+          style={{ marginLeft: 10 }}
+        >
+          <FaBars size={24} color={Colors[colorScheme ?? 'light'].text} />
+        </Pressable>
+      ),
+    })}
+  >
+  <Drawer.Screen
+  name="Passcode"
+  options={{
+    title: 'Passcode',
+    headerShown: false,           // ซ่อนแถบด้านบน
+    swipeEnabled: false,         // ปิด gesture ลิ้นชัก
+    drawerIcon: ({ color }) => <FaLock color={color} size={24} />,
+    drawerItemStyle: { display: 'none' }, // ซ่อนจากเมนูลิ้นชัก
+  }}
+  component={Passcode}
+/>
+    <Drawer.Screen
+      name="Dashboard"
+      options={{
+        title: 'สรุปการขาย',
+        drawerIcon: ({ color }) => <FaTachometerAlt color={color} size={24} />,
+     
+      }}
+      component={Dashboard}
+    />
+    <Drawer.Screen
+      name="Orders"
+      options={{
+        title: 'จัดการออเดอร์',
+        drawerIcon: ({ color }) => <FaReceipt color={color} size={24} />,
+      }}
+      component={Orders}
+    />
+    <Drawer.Screen
+      name="OrderDetail"
+      options={{
+        title: 'จัดการสินค้าในออเดอร์',
+        drawerIcon: ({ color }) => <FaFileAlt color={color} size={24} />,
+      }}
+      component={OrderDetail}
+    />
+    <Drawer.Screen
+      name="products"
+      options={{
+        title: 'เพิ่ม/แก้ไขสินค้า',
+        drawerIcon: ({ color }) => <FaTags color={color} size={24} />,
+      }}
+      component={Products}
+    />
+    <Drawer.Screen
+      name="CategoryScreen"
+      options={{
+        title: 'เพิ่ม/แก้ไขหมวดหมู่สินค้า',
+        drawerIcon: ({ color }) => <FaThLarge color={color} size={24} />,
+      }}
+      component={CategoryScreen}
+    />
+    <Drawer.Screen
+      name="Setting"
+      options={{
+        title: 'ตั้งค่า',
+        drawerIcon: ({ color }) => <FaCog color={color} size={24} />,
+      }}
+      component={Setting}
+    />
+    <Drawer.Screen
+      name="MemberRegister"
+      options={{
+        title: 'ลงทะเบียนสมาชิก',
+        drawerIcon: ({ color }) => <FaUserPlus color={color} size={24} />,
+      }}
+      component={MemberRegister}
+    />
+  </Drawer.Navigator>
   );
 };
 

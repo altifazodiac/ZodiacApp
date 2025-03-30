@@ -86,7 +86,12 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
     ]).start();
     setTimeout(onClose, 300);
   };
-
+  const handleCashClick = () => {
+    if (!numberValue || parseInt(numberValue) === 0) {
+      setNumberValue(total.toString());
+    }
+    handleClose(); // แล้วค่อยปิด Modal ทีหลัง
+  };
   const dialPadButtons = [
     { digit: "1", letters: "", type: "number" },
     { digit: "2", letters: "ABC", type: "number" },
@@ -167,7 +172,7 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
             ))}
           </View>
           
-          <TouchableOpacity style={styles.SubmitButton} onPress={handleClose}>
+          <TouchableOpacity style={styles.SubmitButton} onPress={handleCashClick}>
             <MaterialIcons name="currency-exchange" size={22} color="white"/>
             <Text style={styles.SubmitButtonText}>Cash {numberValue || "0"}฿</Text>
           </TouchableOpacity>
@@ -283,7 +288,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
   title: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isSmallPhone ? 20 : 22,
     marginBottom: 8,
     textAlign: "center",
@@ -296,7 +301,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   callingText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isSmallPhone ? 14 : 16,
     color: "#666",
     marginBottom: 16,
@@ -325,7 +330,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   dialButtonText: {
-    fontFamily: "GoogleSans",
+    fontFamily: "GoogleSans-Regular",
     fontSize: isSmallPhone ? 20 : 22,
     fontWeight: "600",
   },
