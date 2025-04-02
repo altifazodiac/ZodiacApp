@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { MaterialIcons } from "@expo/vector-icons";
+import { FaMoneyBill } from "react-icons/fa";
 
 interface PhoneDialerModalProps {
   visible: boolean;
@@ -20,6 +20,8 @@ interface PhoneDialerModalProps {
   onMoneyChanged: (value: number) => void;
   onCashChanged: (value: number) => void;
   onClose: () => void;
+  onProceedToPayment?: (cashValue?: number) => void; // ปรับให้รับ cashValue
+  setPaymentDetails?: (details: { [method: string]: number } | ((prev: { [method: string]: number }) => { [method: string]: number })) => void;
 }
 
 const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
@@ -29,6 +31,8 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
   cashChange,
   onMoneyChanged,
   onCashChanged,
+  onProceedToPayment,
+  setPaymentDetails, // Destructure prop
 }) => {
   const [numberValue, setNumberValue] = useState<string>(cashChange.toString());
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -68,7 +72,13 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
       ]).start();
     }
   }, [visible, cashChange]);
-
+  useEffect(() => {
+    if (!visible) {
+      setNumberValue("0"); // Reset เมื่อ modal ปิด
+    } else {
+      setNumberValue(cashChange.toString()); // อัปเดตเมื่อ modal เปิด
+    }
+  }, [visible, cashChange]);
   const handleClose = () => {
     Animated.parallel([
       Animated.timing(opacityAnim, {
@@ -84,13 +94,43 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
         useNativeDriver: true,
       }),
     ]).start();
-    setTimeout(onClose, 300);
+    setTimeout(() => {
+      setNumberValue("0");
+      onClose();
+    }, 300);
   };
+
   const handleCashClick = () => {
-    if (!numberValue || parseInt(numberValue) === 0) {
-      setNumberValue(total.toString());
+    const cashValue = parseInt(numberValue) || 0;
+  
+    // อัปเดต cashChange และ moneyChanged
+    onCashChanged(cashValue || total);
+    onMoneyChanged(cashValue - total);
+  
+    // บันทึกยอด Cash ใน paymentDetails
+    if (cashValue > 0 && setPaymentDetails) {
+      setPaymentDetails((prev: { [method: string]: number }) => {
+        const newDetails = { ...prev, Cash: cashValue };
+        console.log("Updated paymentDetails in PhoneDialerModal:", newDetails); // ดีบัก
+        return newDetails;
+      });
     }
-    handleClose(); // แล้วค่อยปิด Modal ทีหลัง
+  
+    // รอให้ state อัปเดตก่อนดำเนินการ
+    setTimeout(() => {
+      console.log("Cash Value before proceed:", cashValue, "Total:", total); // ดีบัก
+      if (cashValue < total && cashValue !== 0) {
+        // เงินไม่พอ ปิด modal เพื่อให้เลือกวิธีชำระเพิ่ม
+        handleClose();
+      } else {
+        // เงินเพียงพอ ดำเนินการต่อ
+        if (onProceedToPayment) {
+          console.log("Calling onProceedToPayment with cashValue:", cashValue); // ดีบัก
+          onProceedToPayment();
+        }
+        handleClose();
+      }
+    }, 100); // เพิ่มเวลาเป็น 100ms เพื่อให้ state อัปเดตแน่นอน
   };
   const dialPadButtons = [
     { digit: "1", letters: "", type: "number" },
@@ -141,21 +181,21 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
           
-          <Text style={styles.title}>Add Cash Payment</Text>
+          <Text style={styles.title}>ชำระด้วยเงินสด</Text>
           
           <Text style={[styles.phoneNumber, { color: parseInt(numberValue) >= total ? "green" : "#3a5665" }]}>
             {numberValue || "0"}฿
           </Text>
           
           <Text style={styles.callingText}>
-            Total: {total}฿ {" "}
+            ยอดชำระ: {total}฿ {" "}
             {parseInt(numberValue) > total ? (
               <Text style={{ color: "green" }}>
-                (Change: {parseInt(numberValue) - total}฿)
+                (เงินทอน: {parseInt(numberValue) - total}฿)
               </Text>
             ) : (
               <Text style={{ color: "red" }}>
-                (Remaining: {total - (parseInt(numberValue) || 0)}฿)
+                (ชำระเพิ่ม: {total - (parseInt(numberValue) || 0)}฿)
               </Text>
             )}
           </Text>
@@ -173,15 +213,24 @@ const PhoneDialerModal: React.FC<PhoneDialerModalProps> = ({
           </View>
           
           <TouchableOpacity style={styles.SubmitButton} onPress={handleCashClick}>
-            <MaterialIcons name="currency-exchange" size={22} color="white"/>
-            <Text style={styles.SubmitButtonText}>Cash {numberValue || "0"}฿</Text>
-          </TouchableOpacity>
+  <FaMoneyBill size={22} color="white" />
+  {parseInt(numberValue) !== 0 ? (
+    <Text style={styles.SubmitButtonText}>
+      ชำระเงิน {numberValue || "0"}฿
+    </Text>
+  ) : (
+    <Text style={styles.SubmitButtonText}>
+      ชำระเงิน {total || "0"}฿
+    </Text>
+  )}
+</TouchableOpacity>
         </Animated.View>
       </Animated.View>
     </Modal>
   );
 };
 
+// DialButton component remains unchanged
 const DialButton: React.FC<{
   digit: string;
   letters: string;
@@ -268,8 +317,8 @@ const DialButton: React.FC<{
 };
 
 const windowWidth = Dimensions.get("window").width;
-const isSmallPhone = windowWidth <= 375; // iPhone 8
-const isMediumPhone = windowWidth > 375 && windowWidth <= 414; // iPhone 13 Pro Max
+const isSmallPhone = windowWidth <= 375;
+const isMediumPhone = windowWidth > 375 && windowWidth <= 414;
 
 const styles = StyleSheet.create({
   modalBackground: {
@@ -288,7 +337,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
   title: {
-    fontFamily: "GoogleSans-Regular",
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     fontSize: isSmallPhone ? 20 : 22,
     marginBottom: 8,
     textAlign: "center",
@@ -301,7 +350,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   callingText: {
-    fontFamily: "GoogleSans-Regular",
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     fontSize: isSmallPhone ? 14 : 16,
     color: "#666",
     marginBottom: 16,
@@ -330,11 +379,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   dialButtonText: {
-    fontFamily: "GoogleSans-Regular",
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     fontSize: isSmallPhone ? 20 : 22,
     fontWeight: "600",
   },
   letterText: {
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     fontSize: isSmallPhone ? 9 : 10,
     marginTop: 4,
   },
@@ -352,6 +402,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   SubmitButtonText: {
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     color: "white",
     fontSize: isSmallPhone ? 16 : 18,
     marginLeft: 8,
@@ -365,6 +416,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   closeButtonText: {
+    fontFamily: "GoogleSans-Regular,'kanit-regular'",
     fontWeight: "bold",
     fontSize: isSmallPhone ? 16 : 18,
     color: "#666",

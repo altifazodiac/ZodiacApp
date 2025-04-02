@@ -1,29 +1,32 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { FaMoneyBillAlt, FaCreditCard, FaQrcode } from 'react-icons/fa'; // นำเข้าไอคอนจาก Font Awesome
+import { FaMoneyBillAlt, FaCreditCard, FaQrcode } from 'react-icons/fa';
 
 interface PaymentMethodSelectorProps {
   onMethodSelect: (method: string) => void;
   handleOpenDialer: () => void;
   handleOpenQrDialer: () => void;
+  selectedMethods: string[];
 }
 
 const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
   onMethodSelect,
   handleOpenDialer,
   handleOpenQrDialer,
+  selectedMethods,
 }) => {
-  const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
-
   const handleMethodToggle = (method: string) => {
     const isMethodSelected = selectedMethods.includes(method);
-    const newSelectedMethods = isMethodSelected
-      ? selectedMethods.filter((m) => m !== method)
-      : [...selectedMethods, method];
-
-    setSelectedMethods(newSelectedMethods);
+    
+    // If selecting Cash and Scan is already selected, deselect Scan first
+    if (method === "Cash" && selectedMethods.includes("Scan")) {
+      onMethodSelect("Scan"); // Deselect Scan
+    }
+    
+    // Toggle the selected method
     onMethodSelect(method);
 
+    // Open appropriate dialog only if the method is being selected (not deselected)
     if (!isMethodSelected) {
       if (method === "Cash") {
         handleOpenDialer();
@@ -58,12 +61,12 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity disabled
+        <TouchableOpacity
+          disabled
           style={[
             styles.button,
             selectedMethods.includes("Card") && styles.selectedButton,
           ]}
-          //onPress={() => handleMethodToggle("Card")}
         >
           <FaCreditCard
             size={16}

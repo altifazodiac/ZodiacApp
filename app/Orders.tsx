@@ -21,6 +21,7 @@ import {
   Alert,
   Image,
   TextInput,
+  Modal,
 } from "react-native";
 import { database, db, ref, onValue } from "../utils/firebase";
 import { Option, Product, Category, OrderItem } from "../Data/types";
@@ -54,6 +55,7 @@ const windowHeight = Dimensions.get("window").height;
 const isMobile = windowWidth <= 768;
 const isTablet = windowWidth > 768 && windowWidth <= 1024;
 const currentTheme = theme.light;
+
 const Orders = () => {
   const { width, height } = Dimensions.get("window");
   const calculateNumColumns = () => {
@@ -113,7 +115,7 @@ const Orders = () => {
   const handleCashChanged = (newCashValue: number) => {
     setCashChange(newCashValue); // Update cashChange in Orders.tsx
   };
-  const [isQrDialerVisible, setQrIsDialerVisible] = useState(false);
+ 
   const [isQRModalVisible, setQRModalVisible] = useState(false);
   const mobileNumber = "0651199354"; // Replace with customer mobile number
 
@@ -136,7 +138,6 @@ const Orders = () => {
       typeof option.id === "string"
     );
   };
-
   const validateOptions = (options: any): Option[] => {
     if (Array.isArray(options)) {
       return options.filter(isValidOption);
@@ -145,6 +146,12 @@ const Orders = () => {
   };
 
   const [receiptNumber, setReceiptNumber] = useState("Loading...");
+  const [duplicateAlertVisible, setDuplicateAlertVisible] = useState(false);
+const [potentialDuplicateOrder, setPotentialDuplicateOrder] = useState<any>(null);
+const [lastSavedOrder, setLastSavedOrder] = useState<any>(null);
+const [paymentDetails, setPaymentDetails] = useState<{ [method: string]: number }>({});
+ 
+
 
   useEffect(() => {
     const fetchQueueNumber = async () => {
@@ -174,6 +181,84 @@ const Orders = () => {
       await set(queueRef, newQueueNumber);
     }
   };
+  const DuplicateOrderAlert = () => {
+    return (
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={duplicateAlertVisible}
+        onRequestClose={() => setDuplicateAlertVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertContainer}>
+            <Text style={styles.alertTitle}>คำเตือน: ออเดอร์อาจซ้ำ</Text>
+            <Text style={styles.alertMessage}>
+              พบออเดอร์ที่มีรายการคล้ายกับออเดอร์ก่อนหน้า 
+              (ใบเสร็จ #{lastSavedOrder?.receiptNumber})
+              ต้องการดำเนินการต่อหรือไม่?
+            </Text>
+            
+            <View style={styles.alertButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.cancelButton]}
+                onPress={() => {
+                  setDuplicateAlertVisible(false);
+                  setPotentialDuplicateOrder(null);
+                }}
+              >
+                <Text style={styles.alertButtonText}>ยกเลิก</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.confirmButton]}
+                onPress={async () => {
+                  setDuplicateAlertVisible(false);
+                  if (potentialDuplicateOrder) {
+                    await proceedWithOrder(potentialDuplicateOrder);
+                  }
+                  setPotentialDuplicateOrder(null);
+                }}
+              >
+                <Text style={styles.alertButtonText}>ดำเนินการต่อ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+  // ฟังก์ชันช่วยเปรียบเทียบออเดอร์
+const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
+  if (!previousOrder?.items || !currentOrder.length) return false;
+
+  const currentItems = currentOrder.map(item => ({
+    productId: item.product.id,
+    quantity: item.quantity,
+    options: item.selectedOptions.map(opt => opt.id).sort(),
+    customInput: item.customInput || ''
+  }));
+
+  const previousItems = previousOrder.items.map((item: any) => ({
+    productId: item.productId,
+    quantity: item.quantity,
+    options: item.selectedOptions?.map((opt: any) => opt.id).sort() || [],
+    customInput: item.customInput || ''
+  }));
+
+  // เปรียบเทียบจำนวนรายการ
+  if (currentItems.length !== previousItems.length) return false;
+
+  // เปรียบเทียบแต่ละรายการ
+  return currentItems.every((current, index) => {
+    const prev = previousItems[index];
+    return (
+      current.productId === prev.productId &&
+      current.quantity === prev.quantity &&
+      current.customInput === prev.customInput &&
+      current.options.length === prev.options.length &&
+      current.options.every((opt, i) => opt === prev.options[i])
+    );
+  });
+};
   const [formattedDate, setFormattedDate] = useState("");
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
@@ -817,26 +902,40 @@ const Orders = () => {
 
   const handleMethodSelect = (method: string) => {
     setSelectedPaymentMethod((prevMethods) => {
-      // Determine if the method is already selected
       const updatedMethods = prevMethods.includes(method)
-        ? prevMethods.filter((m) => m !== method) // Remove if already selected
-        : [...prevMethods, method]; // Add if not selected
-
-      // If only one payment method is selected and it covers the total, clear any second method
-      if (
-        updatedMethods.length === 1 &&
-        updatedMethods[0] === "Cash" &&
-        cashChange >= total
-      ) {
-        return [updatedMethods[0]]; // Only keep the first payment method if it covers the total
-      }
-
-      // If there are two payment methods but the first method covers the total, remove the second
-      if (updatedMethods.length > 1 && cashChange >= total) {
-        return [updatedMethods[0]]; // Keep only the first payment method
-      }
-
-      return updatedMethods; // Otherwise, return the updated methods as is
+        ? prevMethods.filter((m) => m !== method)
+        : [...prevMethods, method];
+  
+      // Ensure paymentDetails is updated before opening modals
+      setPaymentDetails((prev) => {
+        const newDetails = { ...prev };
+        if (!updatedMethods.includes("Cash")) delete newDetails.Cash;
+        if (!updatedMethods.includes("Scan")) delete newDetails.Scan;
+  
+        if (method === "Scan" && updatedMethods.includes("Cash")) {
+          // Mixed payment: Set Scan to remaining amount
+          newDetails.Scan = total - (newDetails.Cash || 0);
+        } else if (method === "Scan" && !updatedMethods.includes("Cash")) {
+          // Scan only: Set full amount
+          newDetails.Scan = total;
+        }
+  
+        console.log("Payment details after method select:", newDetails);
+        return newDetails;
+      });
+  
+      // Open modals after state updates
+      setTimeout(() => {
+        if (method === "Cash" && !prevMethods.includes("Cash")) {
+          handleOpenDialer();
+        }
+        if (method === "Scan" && !prevMethods.includes("Scan")) {
+          console.log("Opening QR modal with total:", total, "and cash:", paymentDetails.Cash);
+          handleQrOpenDialer();
+        }
+      }, 50);
+  
+      return updatedMethods;
     });
   };
   const openEditModal = (index: number) => {
@@ -889,68 +988,65 @@ const Orders = () => {
     try {
       const db = getDatabase();
       const ordersRef = ref(db, "orders");
-
-      // ตรวจสอบและแมปข้อมูล items ใหม่
-      const items = orderItems
-        .map((item) => {
-          // ตรวจสอบว่า item และ item.product มีค่าถูกต้อง
-          if (!item || !item.product) {
-            console.warn("Invalid item detected:", item);
-            return null;
-          }
-
-          return {
-            productId: item.product.id || "unknown-id",
-            productName: item.product.nameDisplay || "Unknown Product",
-            productSize: item.product.productSize || "",
-            quantity: item.quantity || 1,
-            price: parseFloat(item.product.price) || 0,
-            selectedOptions:
-              item.selectedOptions?.map((opt) => ({
-                id: opt.id || "",
-                name: opt.name || "",
-                price: opt.price || 0,
-              })) || [],
-            customInput: item.customInput || "",
-            totalPrice:
-              item.quantity *
-                (parseFloat(item.product.price) +
-                  (item.selectedOptions?.reduce(
-                    (sum, opt) => sum + (opt.price || 0),
-                    0
-                  ) || 0)) || 0,
-          };
-        })
-        .filter((item) => item !== null); // กรองออกหากมี item เป็น null
-
-      // ตรวจสอบว่ามี items ที่ถูกต้องก่อนบันทึก
-      if (items.length === 0) {
-        throw new Error("No valid items to save");
-      }
+  
+      const items = orderItems.map((item) => ({
+        productId: item.product.id,
+        productName: item.product.nameDisplay,
+        productSize: item.product.productSize || "",
+        quantity: item.quantity,
+        price: parseFloat(item.product.price),
+        selectedOptions: item.selectedOptions.map((opt) => ({
+          id: opt.id,
+          name: opt.name,
+          price: opt.price,
+        })),
+        customInput: item.customInput || "",
+        totalPrice:
+          item.quantity *
+          (parseFloat(item.product.price) +
+            item.selectedOptions.reduce((sum, opt) => sum + opt.price, 0)),
+      }));
+  
       const now = new Date();
-      const timezoneOffset = 7 * 60; // Bangkok UTC+7 (หน่วยเป็นนาที)
+      const timezoneOffset = 7 * 60; // Bangkok UTC+7
       const localTime = new Date(now.getTime() + timezoneOffset * 60 * 1000);
+  
+      // Debug paymentDetails
+      console.log("paymentDetails before saving:", paymentDetails);
+  
+      // Use total for Cash payment amount when only Cash is selected
+      const paymentMethods = selectedPaymentMethod.map((method) => {
+        let amount = paymentDetails[method] || 0;
+        if (method === "Cash" && selectedPaymentMethod.length === 1) {
+          amount = total; // Always use total for Cash-only payment
+        }
+        console.log(`Saving ${method} with amount:`, amount);
+        return { method, amount };
+      });
+  
+      // Calculate remainBalance based on cashChange
+      const totalPaid = paymentMethods.reduce((sum, { amount }) => sum + amount, 0);
+      const correctedRemainBalance = cashChange >= total ? cashChange - total : 0;
+  
       const orderData = {
         receiptNumber,
         queueNumber,
         orderType: selectedOrderType,
-        items, // ใช้ items ที่ผ่านการตรวจสอบแล้ว
+        items,
         subtotal,
         tax,
         serviceCharge,
         total,
         cashChange,
-        remainBalance,
-        paymentMethods: selectedPaymentMethod,
-        orderDate: localTime.toISOString().replace('T', ' ').replace(/\..+/, ''), // แปลงเป็น ISO string และลบ milliseconds
+        remainBalance: correctedRemainBalance, // Use corrected value
+        paymentMethods,
+        orderDate: localTime.toISOString().replace("T", " ").replace(/\..+/, ""),
       };
-
-      console.log("Saving order data:", orderData); // สำหรับ debug
-
+  
       const newOrderRef = push(ordersRef);
       await set(newOrderRef, orderData);
-
-      console.log("✅ Order saved successfully!");
+  
+      console.log("✅ Order saved successfully:", orderData);
       return true;
     } catch (error) {
       console.error("❌ Failed to save order:", error);
@@ -959,52 +1055,247 @@ const Orders = () => {
     }
   };
 
-  const handleProceedToPayment = async () => {
-    try {
-      if (orderItems.length === 0) {
-        window.alert("No Items", "กรุณาเพิ่มอย่างน้อยหนึ่งรายการ");
-        return;
-      }
-      if (selectedPaymentMethod.length === 0) {
-        window.alert("No Payment Method", "กรุณาเลือกวิธีการชำระเงิน");
-        return;
-      }
-      // 1. อัปเดตเลขที่ใบเสร็จและคิวให้เสร็จก่อน
-      await incrementReceiptNumber();
-      const newQueueNumber = (queueNumber || 0) + 1;
-      await set(ref(database, "lastQueueNumber"), newQueueNumber);
+ interface OrderData {
+  orderItems: OrderItem[];
+  receiptNumber: string;
+  queueNumber: number;
+  selectedOrderType: OrderType;
+  total: number;
+  subtotal: number;
+  tax: number;
+  serviceCharge: number;
+  cashChange: number;
+  remainbalance: number;
+  selectedPaymentMethod: string[];
+}
 
-      // 2. ใช้ค่าล่าสุดจาก state
-      const currentOrderItems = orderItems.map((item) => ({ ...item })); // Deep copy
+interface OrderData {
+  orderItems: OrderItem[];
+  receiptNumber: string;
+  queueNumber: number;
+  selectedOrderType: OrderType;
+  total: number;
+  subtotal: number;
+  tax: number;
+  serviceCharge: number;
+  cashChange: number;
+  remainbalance: number;
+  selectedPaymentMethod: string[];
+}
 
-      // 3. บันทึกข้อมูล
-      const success = await saveOrderToDatabase(
-        currentOrderItems,
-        receiptNumber,
-        newQueueNumber,
-        selectedOrderType,
-        total,
-        subtotal,
-        tax,
-        serviceCharge,
-        cashChange,
-        remainbalance,
-        selectedPaymentMethod
-      );
+const updatePaymentDetails = async (cashValue?: number): Promise<{ [key: string]: number }> => {
+  return new Promise((resolve) => {
+    setPaymentDetails((prev) => {
+      const updatedDetails = { ...prev };
+      console.log("updatePaymentDetails - Initial paymentDetails:", prev, "cashValue:", cashValue, "cashChange:", cashChange);
 
-      if (success) {
-        // 4. รีเซ็ตสถานะหลังบันทึกสำเร็จ
-        setOrderItems([]);
-        setSelectedPaymentMethod([]);
-        setCashChange(0);
-        setRemainBalance(0);
-        setQueueNumber(newQueueNumber);
+      if (selectedPaymentMethod.length === 1) {
+        if (selectedPaymentMethod.includes("Cash")) {
+          // Cap payment amount at total, use cashValue or cashChange for change calculation
+          updatedDetails.Cash = total; // Always use total for payment amount
+          updatedDetails.Scan = 0;
+        } else if (selectedPaymentMethod.includes("Scan")) {
+          updatedDetails.Scan = total;
+          updatedDetails.Cash = 0;
+        }
+      } else if (selectedPaymentMethod.includes("Cash") && selectedPaymentMethod.includes("Scan")) {
+        updatedDetails.Cash = cashValue || cashChange || 0;
+        updatedDetails.Scan = total - (cashValue || cashChange || 0);
       }
-    } catch (error) {
-      console.error("Payment process failed:", error);
-      window.alert("Error", "ไม่สามารถดำเนินการชำระเงินให้เสร็จสมบูรณ์ได้");
+
+      console.log("Updated paymentDetails:", updatedDetails);
+      resolve(updatedDetails);
+      return updatedDetails;
+    });
+  });
+};
+
+const handleProceedToPayment = async (cashValue?: number) => {
+  try {
+    console.log("handleProceedToPayment called with cashValue:", cashValue);
+    if (orderItems.length === 0) {
+      showAlert("No Items", "กรุณาเพิ่มอย่างน้อยหนึ่งรายการ");
+      return false;
     }
-  };
+    if (selectedPaymentMethod.length === 0) {
+      showAlert("No Payment Method", "กรุณาเลือกวิธีการชำระเงิน");
+      return false;
+    }
+
+    const updatedPaymentDetails = await updatePaymentDetails(cashValue);
+    console.log("After updatePaymentDetails:", updatedPaymentDetails);
+
+    if (!(await validatePayment(updatedPaymentDetails))) {
+      return false;
+    }
+
+    if (await checkDuplicateOrder(updatedPaymentDetails)) {
+      return false;
+    }
+
+    return await processPayment(updatedPaymentDetails);
+  } catch (error) {
+    handlePaymentError(error);
+    return false;
+  }
+};
+
+const validatePayment = async (paymentDetails: { [key: string]: number }) => {
+  const totalPaid = calculateTotalPaid(paymentDetails);
+  console.log("Validating payment:", { totalPaid, total, paymentDetails });
+
+  if (totalPaid < total) {
+    showPaymentAlert(totalPaid, paymentDetails);
+    console.error(`Payment insufficient: ${totalPaid} < ${total}`);
+    return false;
+  }
+  if (totalPaid === 0) {
+    console.error("No payment recorded");
+    showAlert("No Payment", "กรุณาระบุยอดชำระเงิน");
+    return false;
+  }
+  return true;
+};
+
+const calculateTotalPaid = (details: { [key: string]: number }) => {
+  return Object.values(details).reduce((sum, val) => sum + val, 0);
+};
+
+const checkDuplicateOrder = async (paymentDetails: { [key: string]: number }) => {
+  if (!lastSavedOrder || !isOrderSimilar(orderItems, lastSavedOrder)) return false;
+
+  setPotentialDuplicateOrder({
+    orderItems,
+    receiptNumber,
+    queueNumber: (queueNumber || 0) + 1,
+    selectedOrderType,
+    total,
+    subtotal,
+    tax,
+    serviceCharge,
+    cashChange: paymentDetails.Cash || 0,
+    remainbalance: total - calculateTotalPaid(paymentDetails),
+    selectedPaymentMethod,
+  });
+  setDuplicateAlertVisible(true);
+  return true;
+};
+
+const processPayment = async (paymentDetails: { [key: string]: number }) => {
+  await incrementReceiptNumber();
+  const newQueueNumber = (queueNumber || 0) + 1;
+  await set(ref(database, "lastQueueNumber"), newQueueNumber);
+
+  const success = await saveOrderData({
+    paymentDetails,
+    newQueueNumber,
+    totalPaid: calculateTotalPaid(paymentDetails)
+  });
+
+  if (success) {
+    resetPaymentState(newQueueNumber);
+    showAlert("Success", "ชำระเงินสำเร็จ");
+    return true;
+  }
+  throw new Error("Failed to save order");
+};
+ 
+const saveOrderData = async ({
+  paymentDetails,
+  newQueueNumber,
+  totalPaid
+}: {
+  paymentDetails: { [key: string]: number };
+  newQueueNumber: number;
+  totalPaid: number;
+}) => {
+  return await saveOrderToDatabase(
+    orderItems,
+    receiptNumber,
+    newQueueNumber,
+    selectedOrderType,
+    total,
+    subtotal,
+    tax,
+    serviceCharge,
+    paymentDetails.Cash || 0,
+    total - totalPaid,
+    selectedPaymentMethod
+  );
+};
+
+const resetPaymentState = (newQueueNumber: number) => {
+  setLastSavedOrder({ receiptNumber, items: orderItems });
+  setOrderItems([]);
+  setSelectedPaymentMethod([]);
+  setCashChange(0);
+  setRemainBalance(0);
+  setQueueNumber(newQueueNumber);
+  setPaymentDetails({}); // Only reset after successful save
+  console.log("Payment state reset");
+};
+
+// Utility functions
+const waitForStateUpdate = () => new Promise(resolve => setTimeout(resolve, 50));
+
+const showAlert = (title: string, message: string) => {
+  window.alert(title, message);
+};
+
+const showPaymentAlert = (totalPaid: number, paymentDetails: { [key: string]: number }) => {
+  const breakdown = selectedPaymentMethod.map(method => 
+    `${method}: ${paymentDetails[method] || 0}฿`
+  ).join(", ");
+  showAlert(
+    "Insufficient Payment",
+    `ยอดชำระรวม ${totalPaid}฿ ไม่ครบ ${total}฿ (${breakdown})`
+  );
+};
+
+const logPaymentValidation = (paymentDetails: { [key: string]: number }, totalPaid: number) => {
+  console.log("Payment Validation:", {
+    paymentDetails,
+    total,
+    totalPaid,
+    paymentMethods: selectedPaymentMethod
+  });
+};
+
+const handlePaymentError = (error: unknown) => {
+  console.error("Payment process failed:", error);
+  showAlert("Error", "ไม่สามารถดำเนินการชำระเงินให้เสร็จสมบูรณ์ได้");
+};
+
+// Proceed with duplicate order
+const proceedWithOrder = async (orderData: OrderData) => {
+  try {
+    await incrementReceiptNumber();
+    await set(ref(database, "lastQueueNumber"), orderData.queueNumber);
+
+    const success = await saveOrderToDatabase(
+      orderData.orderItems,
+      orderData.receiptNumber,
+      orderData.queueNumber,
+      orderData.selectedOrderType,
+      orderData.total,
+      orderData.subtotal,
+      orderData.tax,
+      orderData.serviceCharge,
+      orderData.cashChange,
+      orderData.remainbalance,
+      orderData.selectedPaymentMethod
+    );
+
+    if (success) {
+      resetPaymentState(orderData.queueNumber);
+      return true;
+    }
+    throw new Error("Failed to save duplicate order");
+  } catch (error) {
+    handlePaymentError(error);
+    return false;
+  }
+};
   const isMobile =
     windowWidth <= 768 ||
     (typeof navigator !== "undefined" &&
@@ -1036,22 +1327,35 @@ const Orders = () => {
         onChangeText={setCustomInputText}
       />
 
-      <PromptPayQRCodeModal
-        visible={isQRModalVisible}
-        mobileNumber={mobileNumber}
-        amount={remainbalance ? Math.abs(remainbalance) : total}
-        onClose={closeQRCodeModal}
-      />
-      {isDialerVisible && (
-        <PhoneDialerModal
-          visible={isDialerVisible}
-          total={total}
-          cashChange={cashChange} // Pass current cashChange to the modal
-          onMoneyChanged={handleMoneyChanged}
-          onCashChanged={handleCashChanged}
-          onClose={handleCloseDialer}
-        />
-      )}
+<PromptPayQRCodeModal
+  visible={isQRModalVisible}
+  mobileNumber={mobileNumber}
+  amount={
+    (() => {
+      const cashAmount = paymentDetails.Cash || 0;
+      const calculatedAmount =
+        selectedPaymentMethod.includes("Cash") && selectedPaymentMethod.includes("Scan")
+          ? Math.max(total - cashAmount, 0)
+          : total;
+      return calculatedAmount;
+    })()
+  }
+  onClose={closeQRCodeModal}
+  onProceedToPayment={handleProceedToPayment}
+  setPaymentDetails={setPaymentDetails}
+/>
+{isDialerVisible && (
+  <PhoneDialerModal
+    visible={isDialerVisible}
+    total={total}
+    cashChange={cashChange}
+    onMoneyChanged={handleMoneyChanged}
+    onCashChanged={handleCashChanged}
+    onClose={handleCloseDialer}
+    onProceedToPayment={handleProceedToPayment}
+    setPaymentDetails={setPaymentDetails} // Ensure this is passed correctly
+  />
+)}
       {orderDetailModalVisible && (
         <OrderDetailsModal
           addItemToOrder={addItemToOrder}
@@ -1063,6 +1367,7 @@ const Orders = () => {
         />
       )}
       <View style={isMobile ? styles.layoutMobile : styles.layout1}>
+      <DuplicateOrderAlert />
         {Platform.OS === "web" ? (
           <ScrollView
             contentContainerStyle={styles.scrollViewContent}
@@ -1536,67 +1841,44 @@ const Orders = () => {
                 </View>
               )}
 
-              {selectedPaymentMethod.length > 0 && (
-                <>
-                  {/* Primary Payment Method */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                      Payment Method:
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans-Regular",
-                        textAlign: "right",
-                        fontSize: 14,
-                        color: "#3a5565",
-                      }}
-                    >
-                      {selectedPaymentMethod[0] || "N/A"}
-                      {selectedPaymentMethod[0] === "Cash"
-                        ? ` (${cashChange?.toFixed(0)}฿)`
-                        : ` (${total?.toFixed(0)}฿)`}
-                    </Text>
-                  </View>
+{selectedPaymentMethod.length > 0 && (
+  <>
+    {/* แสดงวิธีการชำระเงินทั้งหมด */}
+    {selectedPaymentMethod.map((method, index) => (
+      <View key={index} style={styles.orderTotalRow}>
+        <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+          Payment Method {index + 1}:
+        </Text>
+        <Text
+          style={{
+            fontFamily: "GoogleSans-Regular",
+            textAlign: "right",
+            fontSize: 14,
+            color: "#3a5565",
+          }}
+        >
+          {method} ({paymentDetails[method]?.toFixed(0) || "0"}฿)
+        </Text>
+      </View>
+    ))}
 
-                  {/* Secondary Payment Method, if present */}
-                  {selectedPaymentMethod.length > 1 && (
-                    <View style={styles.orderTotalRow}>
-                      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                        Payment Method 2:
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: "GoogleSans-Regular",
-                          textAlign: "right",
-                          fontSize: 14,
-                          color: "#3a5565",
-                        }}
-                      >
-                        {selectedPaymentMethod[1]}
-                        {selectedPaymentMethod[1] === "Cash"
-                          ? ` (${cashChange?.toFixed(0)}฿)`
-                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Change */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                      Remaining:
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans-Regular",
-                        textAlign: "right",
-                        fontSize: 14,
-                      }}
-                    >
-                      {remainbalance?.toFixed(0)}฿
-                    </Text>
-                  </View>
-                </>
-              )}
+    {/* Remaining */}
+    <View style={styles.orderTotalRow}>
+      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+        Remaining:
+      </Text>
+      <Text
+        style={{
+          fontFamily: "GoogleSans-Regular",
+          textAlign: "right",
+          fontSize: 14,
+        }}
+      >
+        {remainbalance?.toFixed(0)}฿
+      </Text>
+    </View>
+  </>
+)}
 
               {/* Remaining UI elements */}
               <View style={styles.orderTotalRow}>
@@ -1627,17 +1909,13 @@ const Orders = () => {
                 {/* Secondary Payment Option if cashChange < total */}
 
                 <PaymentMethodSelector
-                  onMethodSelect={handleMethodSelect}
-                  handleOpenDialer={handleOpenDialer}
-                  handleOpenQrDialer={handleQrOpenDialer}
-                />
+  onMethodSelect={handleMethodSelect}
+  handleOpenDialer={handleOpenDialer}
+  handleOpenQrDialer={handleQrOpenDialer}
+  selectedMethods={selectedPaymentMethod} // Pass the state
+/>
 
-                <TouchableOpacity
-                  style={styles.proceedButton}
-                  onPress={handleProceedToPayment}
-                >
-                  <Text style={styles.proceedButtonText}>ชำระเงิน</Text>
-                </TouchableOpacity>
+                 
               </Animated.View>
             )}
             <TouchableOpacity style={styles.CloseButton} onPress={toggleDrawer}>
@@ -1649,6 +1927,7 @@ const Orders = () => {
 
       {!isMobile && (
         <View style={styles.layout2}>
+          <DuplicateOrderAlert />
           <View style={styles.orderSummaryContainer}>
             {/* Order List Title */}
             <View style={styles.orderSummaryTitleContainer}>
@@ -1979,67 +2258,44 @@ const Orders = () => {
                 </View>
               )}
 
-              {selectedPaymentMethod.length > 0 && (
-                <>
-                  {/* Primary Payment Method */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                      Payment Method:
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans-Regular",
-                        textAlign: "right",
-                        fontSize: 14,
-                        color: "#3a5565",
-                      }}
-                    >
-                      {selectedPaymentMethod[0] || "N/A"}
-                      {selectedPaymentMethod[0] === "Cash"
-                        ? ` (${cashChange?.toFixed(0)}฿)`
-                        : ` (${total?.toFixed(0)}฿)`}
-                    </Text>
-                  </View>
+{selectedPaymentMethod.length > 0 && (
+  <>
+    {/* แสดงวิธีการชำระเงินทั้งหมด */}
+    {selectedPaymentMethod.map((method, index) => (
+      <View key={index} style={styles.orderTotalRow}>
+        <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+          Payment Method {index + 1}:
+        </Text>
+        <Text
+          style={{
+            fontFamily: "GoogleSans-Regular",
+            textAlign: "right",
+            fontSize: 14,
+            color: "#3a5565",
+          }}
+        >
+          {method} ({paymentDetails[method]?.toFixed(0) || "0"}฿)
+        </Text>
+      </View>
+    ))}
 
-                  {/* Secondary Payment Method, if present */}
-                  {selectedPaymentMethod.length > 1 && (
-                    <View style={styles.orderTotalRow}>
-                      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                        Payment Method 2:
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: "GoogleSans-Regular",
-                          textAlign: "right",
-                          fontSize: 14,
-                          color: "#3a5565",
-                        }}
-                      >
-                        {selectedPaymentMethod[1]}
-                        {selectedPaymentMethod[1] === "Cash"
-                          ? ` (${cashChange?.toFixed(0)}฿)`
-                          : ` (${Math.abs(remainbalance).toFixed(0)}฿)`}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Change */}
-                  <View style={styles.orderTotalRow}>
-                    <Text style={{ fontFamily: "GoogleSans-Regular" }}>
-                      Remaining:
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: "GoogleSans-Regular",
-                        textAlign: "right",
-                        fontSize: 14,
-                      }}
-                    >
-                      {remainbalance?.toFixed(0)}฿
-                    </Text>
-                  </View>
-                </>
-              )}
+    {/* Remaining */}
+    <View style={styles.orderTotalRow}>
+      <Text style={{ fontFamily: "GoogleSans-Regular" }}>
+        Remaining:
+      </Text>
+      <Text
+        style={{
+          fontFamily: "GoogleSans-Regular",
+          textAlign: "right",
+          fontSize: 14,
+        }}
+      >
+        {remainbalance?.toFixed(0)}฿
+      </Text>
+    </View>
+  </>
+)}
 
               {/* Remaining UI elements */}
               <View style={styles.orderTotalRow}>
@@ -2070,18 +2326,12 @@ const Orders = () => {
                 {/* Secondary Payment Option if cashChange < total */}
 
                 <PaymentMethodSelector
-                  onMethodSelect={handleMethodSelect}
-                  handleOpenDialer={handleOpenDialer}
-                  handleOpenQrDialer={handleQrOpenDialer}
-                />
-
-                <TouchableOpacity
-                  style={styles.proceedButton}
-                  onPress={handleProceedToPayment}
-                >
-                  <Text style={styles.proceedButtonText}>ชำระเงิน</Text>
-                </TouchableOpacity>
-              </Animated.View>
+  onMethodSelect={handleMethodSelect}
+  handleOpenDialer={handleOpenDialer}
+  handleOpenQrDialer={handleQrOpenDialer}
+  selectedMethods={selectedPaymentMethod} // Pass the state
+/>
+ </Animated.View>
             )}
           </View>
         </View>
@@ -2574,6 +2824,58 @@ const styles = StyleSheet.create({
     color: "#fff", // White text for contrast
     fontSize: 10, // Small text for a sleek appearance
     fontWeight: "bold", // Bold text to make the button stand out
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  alertTitle: {
+    fontFamily: "GoogleSans-Regular",
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  alertMessage: {
+    fontFamily: "GoogleSans-Regular",
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#666',
+  },
+  alertButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  alertButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#bbbbbb',
+  },
+  confirmButton: {
+    backgroundColor: '#3a5565',
+  },
+  alertButtonText: {
+    fontFamily: "GoogleSans-Regular",
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 
