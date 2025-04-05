@@ -14,6 +14,7 @@ import SignUp from './SignUp';
 import CreatePasscode from './CreatePasscode';
 import Passcode from './Passcode';
 import Dashboard from './Dashboard';
+import SalesAnalytics from './SalesAnalytics';
 import { FaLock, FaTachometerAlt, FaReceipt, FaFileAlt, FaTags, FaThLarge, FaCog, FaUserPlus, FaBars } from 'react-icons/fa'; // นำเข้าไอคอนจาก Font Awesome
 
 const Drawer = createDrawerNavigator();
@@ -66,6 +67,14 @@ const DrawerLayout = () => {
         drawerIcon: ({ color }) => <FaReceipt color={color} size={24} />,
       }}
       component={Orders}
+    />
+    <Drawer.Screen
+      name="SalesAnalytics"
+      options={{
+        title: 'วิเคราะห์การขาย',
+        drawerIcon: ({ color }) => <FaTachometerAlt color={color} size={24} />,
+      }}
+      component={SalesAnalytics}
     />
     <Drawer.Screen
       name="OrderDetail"

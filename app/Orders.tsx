@@ -45,10 +45,21 @@ import PromptPayQRCodeModal from "../components/PromptPayQRCodeModal";
 import { theme } from "../components/theme";
 import { curry } from "lodash";
 import EditNoteModal from "../components/EditNoteModal";
-import { FaChevronCircleDown, FaChevronCircleUp,FaUser, FaCalendarAlt, FaClock,FaPrint, FaTrashAlt  } from "react-icons/fa"; // นำเข้าไอคอนจาก Font Awesome
+import { FaChevronCircleDown, FaChevronCircleUp,FaUser, FaCalendarAlt, FaClock,FaPrint, FaTrashAlt, FaThList   } from "react-icons/fa"; // นำเข้าไอคอนจาก Font Awesome
 import { IoChevronForwardOutline } from "react-icons/io5";
 import { format } from 'date-fns';
+import { LoadingProvider, useLoading } from '../components/LoadingContext';
+import { OrbitProgress } from 'react-loading-indicators';
+import Clock from "../components/clock";
+import localforage from "localforage";
+import NetInfo from "@react-native-community/netinfo";
+import { ReceiptTemplate } from "../components/ReceiptTemplate";
 
+// ตั้งค่า IndexedDB
+localforage.config({
+  name: "OrdersPOS",
+  storeName: "pendingOrders",
+});
 declare const window: any;
 const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
@@ -150,9 +161,11 @@ const Orders = () => {
 const [potentialDuplicateOrder, setPotentialDuplicateOrder] = useState<any>(null);
 const [lastSavedOrder, setLastSavedOrder] = useState<any>(null);
 const [paymentDetails, setPaymentDetails] = useState<{ [method: string]: number }>({});
+const [isLastOrderModalVisible, setLastOrderModalVisible] = useState(false);
+const slideAnim = useRef(new Animated.Value(300)).current;
+const [isOnline, setIsOnline] = useState(true);
  
-
-
+ 
   useEffect(() => {
     const fetchQueueNumber = async () => {
       const queueRef = ref(database, "lastQueueNumber");
@@ -197,7 +210,6 @@ const [paymentDetails, setPaymentDetails] = useState<{ [method: string]: number 
               (ใบเสร็จ #{lastSavedOrder?.receiptNumber})
               ต้องการดำเนินการต่อหรือไม่?
             </Text>
-            
             <View style={styles.alertButtonsContainer}>
               <TouchableOpacity
                 style={[styles.alertButton, styles.cancelButton]}
@@ -227,152 +239,51 @@ const [paymentDetails, setPaymentDetails] = useState<{ [method: string]: number 
     );
   };
   // ฟังก์ชันช่วยเปรียบเทียบออเดอร์
-const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
-  if (!previousOrder?.items || !currentOrder.length) return false;
+  const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
+    if (!previousOrder?.items || !currentOrder.length) return false;
+  
+    const currentItems = currentOrder.map(item => ({
+      productId: item.product.id,
+      quantity: item.quantity,
+      options: (item.selectedOptions || []).map(opt => opt.id).sort().join(','),
+      customInput: item.customInput || ''
+    })).sort((a, b) => a.productId.localeCompare(b.productId));
+  
+    interface OrderItemComparison {
+      productId: string;
+      quantity: number;
+      options: string;
+      customInput: string;
+    }
 
-  const currentItems = currentOrder.map(item => ({
-    productId: item.product.id,
-    quantity: item.quantity,
-    options: item.selectedOptions.map(opt => opt.id).sort(),
-    customInput: item.customInput || ''
-  }));
-
-  const previousItems = previousOrder.items.map((item: any) => ({
-    productId: item.productId,
-    quantity: item.quantity,
-    options: item.selectedOptions?.map((opt: any) => opt.id).sort() || [],
-    customInput: item.customInput || ''
-  }));
-
-  // เปรียบเทียบจำนวนรายการ
-  if (currentItems.length !== previousItems.length) return false;
-
-  // เปรียบเทียบแต่ละรายการ
-  return currentItems.every((current, index) => {
-    const prev = previousItems[index];
-    return (
-      current.productId === prev.productId &&
-      current.quantity === prev.quantity &&
-      current.customInput === prev.customInput &&
-      current.options.length === prev.options.length &&
-      current.options.every((opt, i) => opt === prev.options[i])
-    );
-  });
-};
+    const previousItems = previousOrder.items.map((item: any) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      options: (item.selectedOptions || []).map((opt: any) => opt.id).sort().join(','),
+      customInput: item.customInput || ''
+    })).sort((a: OrderItemComparison, b: OrderItemComparison) => a.productId.localeCompare(b.productId));
+  
+    if (currentItems.length !== previousItems.length) return false;
+  
+    console.log("Current Items:", currentItems, "Previous Items:", previousItems);
+  
+    return currentItems.every((current, index) => {
+      const prev = previousItems[index];
+      return (
+        current.productId === prev.productId &&
+        current.quantity === prev.quantity &&
+        current.options === prev.options &&
+        current.customInput === prev.customInput
+      );
+    });
+  };
   const [formattedDate, setFormattedDate] = useState("");
-  const [hour, setHour] = useState("");
-  const [minute, setMinute] = useState("");
-  const [second, setSecond] = useState("");
-
-  const fadeAnimHour = useRef(new Animated.Value(1)).current;
-  const fadeAnimMinute = useRef(new Animated.Value(1)).current;
-  const fadeAnimSecond = useRef(new Animated.Value(1)).current;
-
-  const translateYAnimHour = useRef(new Animated.Value(0)).current;
-  const translateYAnimMinute = useRef(new Animated.Value(0)).current;
-  const translateYAnimSecond = useRef(new Animated.Value(0)).current;
+ 
   const [discounts, setDiscounts] = useState<{ [key: number]: string }>({});
   const [visibleDiscountInput, setVisibleDiscountInput] = useState<
     number | null
   >(null);
-  useEffect(() => {
-    const updateDateTime = () => {
-      const date = new Date();
-
-      // Format date
-      const dateOptions: Intl.DateTimeFormatOptions = {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      };
-      setFormattedDate(
-        new Intl.DateTimeFormat("en-US", dateOptions).format(date)
-      );
-
-      // Update hour, minute, and second separately
-      setHour(
-        date
-          .toLocaleString("en-US", { hour: "2-digit", hour12: false })
-          .padStart(2, "0")
-      );
-      setMinute(
-        date.toLocaleString("en-US", { minute: "2-digit" }).padStart(2, "0")
-      );
-      setSecond(
-        date.toLocaleString("en-US", { second: "2-digit" }).padStart(2, "0")
-      ); // Ensure two-digit format
-    };
-
-    // Initial setup
-    updateDateTime();
-
-    const intervalId = setInterval(() => {
-      const date = new Date();
-
-      // Start separate animations based on whether each unit changes
-      const newHour = date
-        .toLocaleString("en-US", {
-          hour: "2-digit",
-          hour12: false,
-        })
-        .padStart(2, "0");
-      const newMinute = date
-        .toLocaleString("en-US", { minute: "2-digit" })
-        .padStart(2, "0");
-      const newSecond = date
-        .toLocaleString("en-US", { second: "2-digit" })
-        .padStart(2, "0"); // Ensure two-digit format
-
-      if (newHour !== hour) {
-        animateChange(fadeAnimHour, translateYAnimHour, () => setHour(newHour));
-      }
-      if (newMinute !== minute) {
-        animateChange(fadeAnimMinute, translateYAnimMinute, () =>
-          setMinute(newMinute)
-        );
-      }
-      if (newSecond !== second) {
-        animateChange(fadeAnimSecond, translateYAnimSecond, () =>
-          setSecond(newSecond)
-        ); // Update condition for seconds
-      }
-    }, 1000);
-
-    return () => clearInterval(intervalId);
-  }, [hour, minute, second]);
-
-  const animateChange = (
-    fadeAnim: Animated.Value,
-    translateYAnim: Animated.Value,
-    setTime: () => void
-  ) => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateYAnim, {
-        toValue: -10,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setTime();
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateYAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  };
+  
 
   const fetchLastReceiptNumber = async () => {
     const receiptRef = ref(database, "lastReceiptNumber");
@@ -401,6 +312,7 @@ const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
     fetchLastReceiptNumber();
   }, []);
   useEffect(() => {
+    setIsLoading(true); // Start loading
     const categoriesRef = ref(db, "categories");
     const productsRef = ref(db, "products");
 
@@ -646,6 +558,7 @@ const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
       />
     );
   };
+  
   const rightSwipeActions = (
     progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>,
@@ -986,6 +899,7 @@ const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
     selectedPaymentMethod: string[]
   ) => {
     try {
+      setIsLoading(true); // Start loading
       const db = getDatabase();
       const ordersRef = ref(db, "orders");
   
@@ -1047,6 +961,7 @@ const isOrderSimilar = (currentOrder: OrderItem[], previousOrder: any) => {
       await set(newOrderRef, orderData);
   
       console.log("✅ Order saved successfully:", orderData);
+      setIsLoading(false); // Stop loading on success
       return true;
     } catch (error) {
       console.error("❌ Failed to save order:", error);
@@ -1114,11 +1029,11 @@ const handleProceedToPayment = async (cashValue?: number) => {
   try {
     console.log("handleProceedToPayment called with cashValue:", cashValue);
     if (orderItems.length === 0) {
-      showAlert("No Items", "กรุณาเพิ่มอย่างน้อยหนึ่งรายการ");
+      showAlert("ไม่มีรายการ", "กรุณาเพิ่มอย่างน้อยหนึ่งรายการ");
       return false;
     }
     if (selectedPaymentMethod.length === 0) {
-      showAlert("No Payment Method", "กรุณาเลือกวิธีการชำระเงิน");
+      showAlert("ไม่ได้เลือกวิธีชำระ", "กรุณาเลือกวิธีการชำระเงิน");
       return false;
     }
 
@@ -1129,8 +1044,10 @@ const handleProceedToPayment = async (cashValue?: number) => {
       return false;
     }
 
+    console.log("Checking for duplicate order...");
     if (await checkDuplicateOrder(updatedPaymentDetails)) {
-      return false;
+      console.log("Duplicate order detected, waiting for user confirmation");
+      return false; // รอการยืนยันจากผู้ใช้
     }
 
     return await processPayment(updatedPaymentDetails);
@@ -1189,12 +1106,35 @@ const processPayment = async (paymentDetails: { [key: string]: number }) => {
   const success = await saveOrderData({
     paymentDetails,
     newQueueNumber,
-    totalPaid: calculateTotalPaid(paymentDetails)
+    totalPaid: calculateTotalPaid(paymentDetails),
   });
 
   if (success) {
     resetPaymentState(newQueueNumber);
-    showAlert("Success", "ชำระเงินสำเร็จ");
+    if (Platform.OS === "web") {
+      const html = ReceiptTemplate({
+        receiptNumber,
+        queueNumber,
+        orderItems,
+        subtotal,
+        tax,
+        serviceCharge,
+        total,
+        totalDiscount,
+        selectedPaymentMethod,
+        paymentDetails,
+        remainbalance,
+        settings,
+      });
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
     return true;
   }
   throw new Error("Failed to save order");
@@ -1225,15 +1165,23 @@ const saveOrderData = async ({
 };
 
 const resetPaymentState = (newQueueNumber: number) => {
-  setLastSavedOrder({ receiptNumber, items: orderItems });
+  setLastSavedOrder({
+    receiptNumber,
+    items: orderItems.map(item => ({
+      productId: item.product.id,
+      quantity: item.quantity,
+      selectedOptions: item.selectedOptions,
+      customInput: item.customInput || ''
+    }))
+  });
   setOrderItems([]);
   setSelectedPaymentMethod([]);
   setCashChange(0);
   setRemainBalance(0);
   setQueueNumber(newQueueNumber);
-  setPaymentDetails({}); // Only reset after successful save
-  console.log("Payment state reset");
-};
+  setPaymentDetails({});
+  console.log("Payment state reset, lastSavedOrder:", lastSavedOrder);
+ };
 
 // Utility functions
 const waitForStateUpdate = () => new Promise(resolve => setTimeout(resolve, 50));
@@ -1251,7 +1199,99 @@ const showPaymentAlert = (totalPaid: number, paymentDetails: { [key: string]: nu
     `ยอดชำระรวม ${totalPaid}฿ ไม่ครบ ${total}฿ (${breakdown})`
   );
 };
+const slideIn = () => {
+  setLastOrderModalVisible(true);
+  Animated.timing(slideAnim, {
+    toValue: 0, // Slide to the visible position
+    duration: 300,
+    easing: Easing.out(Easing.ease),
+    useNativeDriver: true,
+  }).start();
+};
+const LastOrderModal = () => {
+  return (
+    <Modal
+      transparent={true}
+      visible={isLastOrderModalVisible}
+      animationType="none"
+      onRequestClose={slideOut}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={slideOut}
+      >
+        <Animated.View
+          style={[
+            styles.lastOrderModalContainer,
+            {
+              transform: [{ translateX: slideAnim }],
+            },
+          ]}
+        >
+          <View style={styles.lastOrderModalContent}>
+            <Text style={styles.lastOrderModalTitle}>รายการสั่งซื้อล่าสุด</Text>
+            {lastSavedOrder ? (
+              <View>
+                <Text style={styles.lastOrderText}>
+                  Receipt #: {lastSavedOrder.receiptNumber}
+                </Text>
+                <Text style={styles.lastOrderText}>รายการ:</Text>
+                {lastSavedOrder.items.map((item: any, index: number) => {
+                  // Find the product in the products array by productId
+                  const product = products.find(
+                    (p) => p.id === item.productId
+                  );
+                  const productName = product
+                    ? product.nameDisplay
+                    : item.productId; // Fallback to productId if not found
 
+                  return (
+                    <View key={index} style={styles.lastOrderItem}>
+                      <Text style={styles.lastOrderItemText}>
+                        - สินค้า: {productName}
+                      </Text>
+                      <Text style={styles.lastOrderItemText}>
+                        จำนวน: {item.quantity}
+                      </Text>
+                      {item.selectedOptions.length > 0 && (
+                        <Text style={styles.lastOrderItemText}>
+                          Options:{" "}
+                          {item.selectedOptions.map((opt: any) => opt.id).join(", ")}
+                        </Text>
+                      )}
+                      {item.customInput && (
+                        <Text style={styles.lastOrderItemText}>
+                          Note: {item.customInput}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.lastOrderText}>No previous order found.</Text>
+            )}
+            <TouchableOpacity
+              style={styles.closeModalButton}
+              onPress={slideOut}
+            >
+              <Text style={styles.closeModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+const slideOut = () => {
+  Animated.timing(slideAnim, {
+    toValue: 300, // Slide back off-screen
+    duration: 200,
+    easing: Easing.in(Easing.ease),
+    useNativeDriver: true,
+  }).start(() => setLastOrderModalVisible(false));
+};
 const logPaymentValidation = (paymentDetails: { [key: string]: number }, totalPaid: number) => {
   console.log("Payment Validation:", {
     paymentDetails,
@@ -1296,6 +1336,38 @@ const proceedWithOrder = async (orderData: OrderData) => {
     return false;
   }
 };
+// ฟังก์ชันพิมพ์ใบเสร็จ
+const printReceipt = () => {
+  if (Platform.OS === "web") {
+    const html = ReceiptTemplate({
+      receiptNumber,
+      queueNumber: queueNumber ?? 0, // กำหนด default เป็น 0 ถ้า null
+      orderItems,
+      subtotal,
+      tax,
+      serviceCharge,
+      total,
+      totalDiscount: totalDiscount ?? 0, // กำหนด default เป็น 0 ถ้า null
+      selectedPaymentMethod,
+      paymentDetails,
+      remainbalance,
+      settings,
+    });
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    } else {
+      console.error("Failed to open print window. Please allow pop-ups.");
+      Alert.alert("Error", "กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบเสร็จ");
+    }
+  } else {
+    console.warn("This function is intended for web platform only");
+  }
+};
   const isMobile =
     windowWidth <= 768 ||
     (typeof navigator !== "undefined" &&
@@ -1314,6 +1386,11 @@ const proceedWithOrder = async (orderData: OrderData) => {
             ]
       }
     >
+      {isLoading && (
+      <View style={styles.loadingContainer}>
+        <OrbitProgress color="#1575a1" size="small" text="" textColor="" />
+      </View>
+    )}
       <EditNoteModal
         visible={modalVisible}
         customInput={customInputText}
@@ -1368,6 +1445,7 @@ const proceedWithOrder = async (orderData: OrderData) => {
       )}
       <View style={isMobile ? styles.layoutMobile : styles.layout1}>
       <DuplicateOrderAlert />
+      <LastOrderModal />
         {Platform.OS === "web" ? (
           <ScrollView
             contentContainerStyle={styles.scrollViewContent}
@@ -1555,14 +1633,25 @@ const proceedWithOrder = async (orderData: OrderData) => {
               <View style={styles.orderHeaderGroup}>
                 <Text style={styles.orderHeaderReceiptText}>
                   {" "}
-                  Queue No. #{queueNumber}
+                  คิวที่ #{queueNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
-                <TouchableOpacity
+              <TouchableOpacity
                   style={[styles.circleButton, { marginRight: 5 }]}
                 >
-                 <FaPrint size={16} />
+                <TouchableOpacity
+  style={[styles.circleButton, { marginRight: 5 }]}
+  onPress={slideIn} // Trigger the slide-in animation
+>
+  <FaThList size={16} />
+</TouchableOpacity>
+                <TouchableOpacity
+      style={[styles.circleButton, { marginRight: 5 }]}
+      onPress={printReceipt}
+    >
+      <FaPrint size={16} />
+    </TouchableOpacity>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1584,43 +1673,7 @@ const proceedWithOrder = async (orderData: OrderData) => {
               </View>
               <View style={styles.orderHeaderGroup}>
               <FaClock size={16} color={"#3c5867"} />
-                <View style={styles.timeContainer}>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimHour,
-                        transform: [{ translateY: translateYAnimHour }],
-                      },
-                    ]}
-                  >
-                    {hour}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimMinute,
-                        transform: [{ translateY: translateYAnimMinute }],
-                      },
-                    ]}
-                  >
-                    {minute}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimSecond,
-                        transform: [{ translateY: translateYAnimSecond }],
-                      },
-                    ]}
-                  >
-                    {second}
-                  </Animated.Text>
-                </View>
+                <Clock/>
               </View>
             </View>
             <View style={styles.orderHeaderTabs}>
@@ -1928,6 +1981,7 @@ const proceedWithOrder = async (orderData: OrderData) => {
       {!isMobile && (
         <View style={styles.layout2}>
           <DuplicateOrderAlert />
+          <LastOrderModal />
           <View style={styles.orderSummaryContainer}>
             {/* Order List Title */}
             <View style={styles.orderSummaryTitleContainer}>
@@ -1950,10 +2004,16 @@ const proceedWithOrder = async (orderData: OrderData) => {
               </View>
               <View style={styles.orderHeaderGroup}>
                 <Text style={styles.orderHeaderReceiptText}>
-                  Queue: #{queueNumber}
+                คิวที่: #{queueNumber}
                 </Text>
               </View>
               <View style={styles.orderHeaderGroup}>
+              <TouchableOpacity
+  style={[styles.circleButton, { marginRight: 5 }]}
+  onPress={slideIn} // Trigger the slide-in animation
+>
+  <FaThList size={16} />
+</TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.circleButton, { marginRight: 5 }]}
                 >
@@ -1979,43 +2039,7 @@ const proceedWithOrder = async (orderData: OrderData) => {
               </View>
               <View style={styles.orderHeaderGroup}>
               <FaClock size={16} color={"#3c5867"} />
-                <View style={styles.timeContainer}>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimHour,
-                        transform: [{ translateY: translateYAnimHour }],
-                      },
-                    ]}
-                  >
-                    {hour}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimMinute,
-                        transform: [{ translateY: translateYAnimMinute }],
-                      },
-                    ]}
-                  >
-                    {minute}
-                  </Animated.Text>
-                  <Text style={styles.timeSeparator}>:</Text>
-                  <Animated.Text
-                    style={[
-                      styles.timeText,
-                      {
-                        opacity: fadeAnimSecond,
-                        transform: [{ translateY: translateYAnimSecond }],
-                      },
-                    ]}
-                  >
-                    {second}
-                  </Animated.Text>
-                </View>
+                <Clock/>
               </View>
             </View>
 
@@ -2339,6 +2363,7 @@ const proceedWithOrder = async (orderData: OrderData) => {
     </View>
   );
 };
+
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
 const isPortrait = screenHeight < screenWidth;
@@ -2684,7 +2709,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   orderHeaderReceiptText: {
-    fontFamily: "GoogleSans-Regular",
+    fontFamily: "Kanit-Regular,GoogleSans-Regular",
     color: "#444",
     fontSize: 18,
     fontWeight: "bold",
@@ -2877,6 +2902,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.8)", // Semi-transparent overlay
+    zIndex: 1000, // Ensure it appears above other content
+  },
+  lastOrderModalContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 300, // Fixed width for the modal
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  lastOrderModalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  lastOrderModalTitle: {
+    fontFamily: 'GoogleSans-Regular',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  lastOrderText: {
+    fontFamily: 'GoogleSans-Regular',
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  lastOrderItem: {
+    marginLeft: 10,
+    marginBottom: 10,
+  },
+  lastOrderItemText: {
+    fontFamily: 'GoogleSans-Regular',
+    fontSize: 12,
+    color: '#444',
+  },
+  closeModalButton: {
+    backgroundColor: '#3a5565',
+    paddingVertical: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  closeModalButtonText: {
+    fontFamily: 'GoogleSans-Regular',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
 });
 
 export default Orders;
+ 
